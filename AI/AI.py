@@ -5,7 +5,7 @@ import time
 from ultralytics import YOLO
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model_path = "Model\yolo11n.pt"
+model_path = "/Model/yolo11n.pt"
 model = YOLO(model_path).to(device)
 # print device used
 print(f"Using device: {device}")

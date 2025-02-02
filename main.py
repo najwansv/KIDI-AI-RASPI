@@ -9,7 +9,7 @@ from AI.AI import  generate_frames, All_Obj_Detection, All_Obj_Detection_In_Boun
 
 # Specify the directory containing your web files
 DIRECTORY = "Dashboard"
-PORT = 80  # Port for serving the HTML
+PORT = 8002  # Port for serving the HTML
 
 # Flask app for backend
 app = Flask(__name__)
