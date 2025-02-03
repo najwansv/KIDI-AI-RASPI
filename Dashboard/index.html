@@ -235,8 +235,6 @@
                 .catch(error => showToast('Error: ' + error));
             });
         }
-
-
         
         document.getElementById('start-streaming').addEventListener('click', function() {
             const button = this;
@@ -281,6 +279,16 @@
                 }
             })
             .catch(error => showToast('Error: ' + error));
+        });
+
+        // Handle page refresh/unload
+        window.addEventListener('beforeunload', function() {
+            // Stop streaming when page is refreshed or closed
+            fetch('http://localhost:5001/stop_streaming', {
+                method: 'POST',
+                // Use keepalive to ensure the request completes even if page is unloading
+                keepalive: true 
+            });
         });
         
     </script>
