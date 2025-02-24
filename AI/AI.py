@@ -17,8 +17,9 @@ boundary_objects = {}  # Dictionary to track objects in the boundary area
 
 
 #======================= Non AI ===========================================
-def generate_frames(rtsp_url):
-    cap = cv2.VideoCapture(rtsp_url)
+def generate_frames(video_source):
+    cap = cv2.VideoCapture(video_source)
+    cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 6000)
     if not cap.isOpened():
         print("Error: Could not open video stream")
         return
@@ -48,6 +49,8 @@ def generate_frames(rtsp_url):
 
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+
+    cap.release()
 
 #======================= AI 1 ===========================================
 def All_Obj_Detection(rtsp_url):

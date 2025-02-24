@@ -11,14 +11,36 @@
     <div id="container">
         <div id="header">
             <img src="logo.png" alt="Logo" id="logo">
-            <h1>KiDi IoT</h1>
+            <h1>KiDi IoT Object Detection AI</h1>
         </div>
         
         <!-- Page 1: Start Stream -->
         <div id="start-page">
             <div id="rtsp-section">
-                <label for="rtsp-link">RTSP Link:</label>
-                <input type="text" id="rtsp-link" name="rtsp-link" placeholder="Enter RTSP link here">
+                <!-- RTSP Radio and Input -->
+                <div class="radio-input-group">
+                    <label>
+                        <input type="radio" id="rtsp-radio" name="stream-type" value="rtsp" checked>
+                        RTSP
+                    </label>
+                    <input type="text" id="rtsp-link" name="rtsp-link" placeholder="Enter RTSP link here">
+                </div>
+
+                <!-- Sample Video Radio and Dropdown -->
+                <div class="radio-input-group">
+                    <label>
+                        <input type="radio" id="sample-video-radio" name="stream-type" value="sample-video">
+                        Sample Video
+                    </label>
+                    <select id="local-video-dropdown">
+                        <option value="resources/Pedestrian.mp4">Pedestrian</option>
+                        <option value="resources/vecteezy_people-crossing-the-street-on-green-light_28257902.mp4">Pedestrian 2</option>
+                        <option value="resources/RoadTraffic1.mp4">Road Traffic 1</option>
+                        <option value="resources/RoadTrafic2.mp4">Road Traffic 2</option>
+                    </select>
+                </div>
+
+                <!-- Start Streaming Button -->
                 <button id="start-streaming">Start Streaming</button>
             </div>
         </div>
@@ -29,10 +51,11 @@
                 <!-- Left section: controls and text -->
                 <div id="left-section">
                     <p>Select AI Mode:</p>
-                    <button id="AI1">AI 1</button>
-                    <button id="AI2">AI 2</button>
-                    <button id="AI3">AI 3</button>
-                    <button id="AI4">AI 4</button>
+                    <button id="AI1">1: All Object Detection</button>
+                    <button id="AI2">2: Object in Boundary Count</button>
+                    <button id="AI3">3: Object Counting</button>
+                    <button id="AI4">4: Age, Gender Detection</button>
+                    <button id="NonAI">Non AI</button>
                     <button id="stop-streaming">Stop Streaming</button>
                 </div>
                 <!-- Right section: video -->
@@ -57,207 +80,259 @@
 
     <script>
         let aiMode = null;
-
-        // Add this to your existing script section
         let objectList = new Set();
         let selectedObject = '';
-
-        // Reset data when changing AI modes
-        function resetDetectionData() {
-            objectList.clear();
-            selectedObject = '';
-            const dropdown = document.getElementById('object-dropdown');
-            dropdown.innerHTML = '<option value="">Select Object</option>';
-            document.getElementById('text-output').innerHTML = '';
-            document.getElementById('count-display').innerHTML = '';
-        }
-
-
-        // Function to update text output
-        function updateTextOutput(data) {
-            const textOutput = document.getElementById('text-output');
-            const objectSelector = document.getElementById('object-selector');
-            
-            if (aiMode === 'AI2') {
-                textOutput.innerHTML = `Objects in boundary:<br>${formatObjectCounts(data)}`;
-                objectSelector.style.display = 'none';
-            } else if (aiMode === 'AI3') {
-                objectSelector.style.display = 'block';
-                updateObjectDropdown(data);
-            }
-        }
-
-        // Function to format object counts for AI2
-        function formatObjectCounts(data) {
-            return Object.entries(data)
-                .map(([obj, count]) => `${obj}: ${count}`)
-                .join('<br>');
-        }
-
-        // Function to update dropdown for AI3
-        function updateObjectDropdown(data) {
-            const dropdown = document.getElementById('object-dropdown');
-            Object.keys(data).forEach(obj => objectList.add(obj));
-            
-            // Only update options if they changed
-            if (dropdown.options.length !== objectList.size + 1) {
-                dropdown.innerHTML = '<option value="">Select Object</option>';
-                [...objectList].sort().forEach(obj => {
-                    const option = document.createElement('option');
-                    option.value = obj;
-                    option.textContent = obj;
-                    dropdown.appendChild(option);
-                });
-            }
-        }
-
-        // Add event listener for dropdown
-        document.getElementById('object-dropdown').addEventListener('change', function(e) {
-        if (e.target.value) {
-            selectedObject = e.target.value;
-            updateSelectedObjectCount();
-        }
-    });
-
-        // Function to update count for selected object
-        function updateSelectedObjectCount() {
-            fetch('http://localhost:5001/get_object_count', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ object: selectedObject })
-            })
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('count-display').innerHTML = 
-                    `Obj Count: ${selectedObject}<br>Count: ${data.count}`;
+    
+        document.addEventListener('DOMContentLoaded', function() {
+            const rtspRadio = document.getElementById('rtsp-radio');
+            const sampleVideoRadio = document.getElementById('sample-video-radio');
+            const rtspLinkInput = document.getElementById('rtsp-link');
+            const localVideoDropdown = document.getElementById('local-video-dropdown');
+            const startStreamingButton = document.getElementById('start-streaming');
+    
+            rtspRadio.addEventListener('change', function() {
+                rtspLinkInput.disabled = false;
+                localVideoDropdown.disabled = true;
             });
-        }
-
-        // Add periodic updates
-        // Add periodic updates with better error handling
-        function startPeriodicUpdates() {
-            setInterval(() => {
-                if (aiMode === 'AI2' || aiMode === 'AI3') {
-                    fetch('http://localhost:5001/get_detection_data')
-                    .then(response => response.json())
-                    .then(data => {
-                        if (Object.keys(data).length > 0) {
-                            updateTextOutput(data);
-                        }
-                    })
-                    .catch(error => console.error('Error fetching detection data:', error));
-                }
-            }, 1000);
-        }
-
-        startPeriodicUpdates();
-
-        document.getElementById('AI1').addEventListener('click', function() {
-            aiMode = 'AI1';
-            updateAiMode(aiMode);
-        });
-
-        document.getElementById('AI2').addEventListener('click', function() {
-            aiMode = 'AI2';
-            updateAiMode(aiMode);
-        });
-
-        document.getElementById('AI3').addEventListener('click', function() {
-            aiMode = 'AI3';
-            updateAiMode(aiMode);
-        });
-
-        document.getElementById('AI4').addEventListener('click', function() {
-            aiMode = 'AI4';
-            updateAiMode(aiMode);
-        });
-
-        
-        
-        // Update AI mode with reset
-        function updateAiMode(mode) {
-            fetch('http://localhost:5001/reset_data', {
-                method: 'POST'
-            })
-            .then(() => {
-                resetDetectionData();
-                
-                // Show/hide info-box based on AI mode
-                const infoBox = document.getElementById('info-box');
-                if (mode === 'AI2' || mode === 'AI3') {
-                    infoBox.style.display = 'block';
+    
+            sampleVideoRadio.addEventListener('change', function() {
+                rtspLinkInput.disabled = true;
+                localVideoDropdown.disabled = false;
+            });
+    
+            if (rtspRadio.checked) {
+                rtspLinkInput.disabled = false;
+                localVideoDropdown.disabled = true;
+            } else {
+                rtspLinkInput.disabled = true;
+                localVideoDropdown.disabled = false;
+            }
+    
+            startStreamingButton.addEventListener('click', function() {
+                const button = this;
+                setLoading(button, true);
+    
+                const rtspLink = rtspLinkInput.value;
+                const localVideoPath = localVideoDropdown.value;
+                const aiMode = 'noAI';
+    
+                let requestBody;
+                if (rtspRadio.checked) {
+                    if (!rtspLink) {
+                        showToast('RTSP link is required for RTSP streaming.', 'error');
+                        setLoading(button, false);
+                        return;
+                    }
+                    requestBody = `rtsp=${encodeURIComponent(rtspLink)}&ai_mode=${encodeURIComponent(aiMode)}`;
                 } else {
-                    infoBox.style.display = 'none';
+                    requestBody = `local_video_path=${encodeURIComponent(localVideoPath)}&ai_mode=${encodeURIComponent(aiMode)}`;
                 }
-                
-                fetch('http://localhost:5001/update_ai_mode', {
+    
+                fetch('http://localhost:5001/start_streaming', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    body: `ai_mode=${encodeURIComponent(mode)}`
+                    body: requestBody,
                 })
                 .then(response => {
                     if (response.ok) {
-                        alert(`AI Mode updated to: ${mode}`);
-                        const videoStream = document.getElementById('video-stream');
-                        videoStream.src = '';
-                        setTimeout(() => {
-                            videoStream.src = `http://localhost:5001/video_feed?timestamp=${new Date().getTime()}`;
-                        }, 100);
+                        showToast('Streaming started successfully!', 'success');
+                        document.getElementById('video-stream').src = "http://localhost:5001/video_feed";
+                        document.getElementById('start-page').style.display = 'none';
+                        document.getElementById('stream-section').style.display = 'flex';
                     } else {
-                        response.text().then(text => alert('Error: ' + text));
+                        response.text().then(text => showToast(text, 'error'));
                     }
                 })
-                .catch(error => alert('Error: ' + error));
+                .catch(error => showToast(error.message, 'error'))
+                .finally(() => setLoading(button, false));
             });
-        }
+    
+            document.getElementById('stop-streaming').addEventListener('click', function() {
+                fetch('http://localhost:5001/stop_streaming', {
+                    method: 'POST',
+                })
+                .then(response => {
+                    if (response.ok) {
+                        showToast('Streaming stopped successfully!');
+                        document.getElementById('video-stream').src = "";
+                        document.getElementById('stream-section').style.display = 'none';
+                        document.getElementById('start-page').style.display = 'block';
+                    } else {
+                        response.text().then(text => showToast('Error: ' + text));
+                    }
+                })
+                .catch(error => showToast('Error: ' + error));
+            });
+    
+            window.addEventListener('beforeunload', function() {
+                fetch('http://localhost:5001/stop_streaming', {
+                    method: 'POST',
+                    keepalive: true 
+                });
+            });
+    
+            document.getElementById('AI1').addEventListener('click', function() {
+                aiMode = 'AI1';
+                updateAiMode(aiMode);
+            });
+    
+            document.getElementById('AI2').addEventListener('click', function() {
+                aiMode = 'AI2';
+                updateAiMode(aiMode);
+            });
+    
+            document.getElementById('AI3').addEventListener('click', function() {
+                aiMode = 'AI3';
+                updateAiMode(aiMode);
+            });
+    
+            document.getElementById('AI4').addEventListener('click', function() {
+                aiMode = 'AI4';
+                updateAiMode(aiMode);
+            });
 
-
-        
-        document.getElementById('start-streaming').addEventListener('click', function() {
-            const rtspLink = document.getElementById('rtsp-link').value;
-            const aiMode = 'noAI'; // Set your AI mode here if needed
-
-            fetch('http://localhost:5001/start_streaming', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `rtsp=${encodeURIComponent(rtspLink)}&ai_mode=${encodeURIComponent(aiMode)}`,
-            })
-            .then(response => {
-                if (response.ok) {
-                    alert('Streaming started successfully!');
-                    document.getElementById('video-stream').src = "http://localhost:5001/video_feed";
-                    document.getElementById('start-page').style.display = 'none';
-                    document.getElementById('stream-section').style.display = 'flex';
+            document.getElementById('NonAI').addEventListener('click', function() {
+                aiMode = 'NonAI';
+                updateAiMode(aiMode);
+            });
+    
+            function updateAiMode(mode) {
+                fetch('http://localhost:5001/reset_data', {
+                    method: 'POST'
+                })
+                .then(() => {
+                    resetDetectionData();
+                    const infoBox = document.getElementById('info-box');
+                    if (mode === 'AI2' || mode === 'AI3') {
+                        infoBox.style.display = 'block';
+                    } else {
+                        infoBox.style.display = 'none';
+                    }
+                    fetch('http://localhost:5001/update_ai_mode', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: `ai_mode=${encodeURIComponent(mode)}`
+                    })
+                    .then(response => {
+                        if (response.ok) {
+                            showToast(`AI Mode updated to: ${mode}`);
+                            const videoStream = document.getElementById('video-stream');
+                            videoStream.src = '';
+                            setTimeout(() => {
+                                videoStream.src = `http://localhost:5001/video_feed?timestamp=${new Date().getTime()}`;
+                            }, 100);
+                        } else {
+                            response.text().then(text => showToast('Error: ' + text));
+                        }
+                    })
+                    .catch(error => showToast('Error: ' + error));
+                });
+            }
+    
+            function resetDetectionData() {
+                objectList.clear();
+                selectedObject = '';
+                const dropdown = document.getElementById('object-dropdown');
+                dropdown.innerHTML = '<option value="">Select Object</option>';
+                document.getElementById('text-output').innerHTML = '';
+                document.getElementById('count-display').innerHTML = '';
+            }
+    
+            function showToast(message, type = 'info') {
+                const toast = document.createElement('div');
+                toast.className = `toast ${type}`;
+                toast.textContent = message;
+                document.body.appendChild(toast);
+                setTimeout(() => {
+                    toast.remove();
+                }, 3000);
+            }
+    
+            function setLoading(button, isLoading) {
+                if (isLoading) {
+                    button.classList.add('loading');
+                    button.disabled = true;
                 } else {
-                    response.text().then(text => alert('Error: ' + text));
+                    button.classList.remove('loading');
+                    button.disabled = false;
                 }
-            })
-            .catch(error => alert('Error: ' + error));
-        });
-
-        document.getElementById('stop-streaming').addEventListener('click', function() {
-            fetch('http://localhost:5001/stop_streaming', {
-                method: 'POST',
-            })
-            .then(response => {
-                if (response.ok) {
-                    alert('Streaming stopped successfully!');
-                    document.getElementById('video-stream').src = "";
-                    document.getElementById('stream-section').style.display = 'none';
-                    document.getElementById('start-page').style.display = 'block';
-                } else {
-                    response.text().then(text => alert('Error: ' + text));
+            }
+    
+            function updateTextOutput(data) {
+                const textOutput = document.getElementById('text-output');
+                const objectSelector = document.getElementById('object-selector');
+                if (aiMode === 'AI2') {
+                    textOutput.innerHTML = `Objects in boundary:<br>${formatObjectCounts(data)}`;
+                    objectSelector.style.display = 'none';
+                } else if (aiMode === 'AI3') {
+                    objectSelector.style.display = 'block';
+                    updateObjectDropdown(data);
                 }
-            })
-            .catch(error => alert('Error: ' + error));
+            }
+    
+            function formatObjectCounts(data) {
+                return Object.entries(data)
+                    .map(([obj, count]) => `${obj}: ${count}`)
+                    .join('<br>');
+            }
+    
+            function updateObjectDropdown(data) {
+                const dropdown = document.getElementById('object-dropdown');
+                Object.keys(data).forEach(obj => objectList.add(obj));
+                if (dropdown.options.length !== objectList.size + 1) {
+                    dropdown.innerHTML = '<option value="">Select Object</option>';
+                    [...objectList].sort().forEach(obj => {
+                        const option = document.createElement('option');
+                        option.value = obj;
+                        option.textContent = obj;
+                        dropdown.appendChild(option);
+                    });
+                }
+            }
+    
+            document.getElementById('object-dropdown').addEventListener('change', function(e) {
+                if (e.target.value) {
+                    selectedObject = e.target.value;
+                    updateSelectedObjectCount();
+                }
+            });
+    
+            function updateSelectedObjectCount() {
+                fetch('http://localhost:5001/get_object_count', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ object: selectedObject })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('count-display').innerHTML = 
+                        `Obj Count: ${selectedObject}<br>Count: ${data.count}`;
+                });
+            }
+    
+            function startPeriodicUpdates() {
+                setInterval(() => {
+                    if (aiMode === 'AI2' || aiMode === 'AI3') {
+                        fetch('http://localhost:5001/get_detection_data')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (Object.keys(data).length > 0) {
+                                updateTextOutput(data);
+                            }
+                        })
+                        .catch(error => console.error('Error fetching detection data:', error));
+                    }
+                }, 1000);
+            }
+    
+            startPeriodicUpdates();
         });
-        
     </script>
 </body>
 </html>
