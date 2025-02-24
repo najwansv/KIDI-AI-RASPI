@@ -83,6 +83,7 @@ button:hover {
     transform: translateY(-1px);
 }
 
+<<<<<<< HEAD
 #stop-streaming {
     background: var(--error);
 }
@@ -91,6 +92,8 @@ button:hover {
     background: var(--secondary);
 }
 
+=======
+>>>>>>> 1975386675fe043852e8aecb6358df86ac32103c
 #left-section {
     display: flex;
     flex-direction: column;
@@ -184,6 +187,7 @@ select {
 @keyframes slideIn {
     from { transform: translateY(100%); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
+<<<<<<< HEAD
 }
 
 /* Add these styles to your existing style.css */
@@ -234,4 +238,6 @@ select {
 
 #start-streaming {
     margin-top: 20px;
+=======
+>>>>>>> 1975386675fe043852e8aecb6358df86ac32103c
 }

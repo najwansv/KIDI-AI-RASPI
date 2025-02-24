@@ -6,7 +6,7 @@ from flask_cors import CORS
 from AI.AI import generate_frames, All_Obj_Detection, All_Obj_Detection_In_Boundary, Obj_Counter, Gender_Mood_Age_Detection
 
 DIRECTORY = "Dashboard"
-PORT = 80
+PORT = 8000  # Port for serving the HTML
 
 app = Flask(__name__)
 CORS(app)
