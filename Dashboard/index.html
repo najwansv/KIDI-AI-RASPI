@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,13 +8,14 @@
     <link rel="stylesheet" href="style.css">
 
 </head>
+
 <body>
     <div id="container">
         <div id="header">
             <img src="logo.png" alt="Logo" id="logo">
             <h1>KiDi IoT Object Detection AI</h1>
         </div>
-        
+
         <!-- Page 1: Start Stream -->
         <div id="start-page">
             <div id="rtsp-section">
@@ -34,7 +36,8 @@
                     </label>
                     <select id="local-video-dropdown">
                         <option value="resources/Pedestrian.mp4">Pedestrian</option>
-                        <option value="resources/vecteezy_people-crossing-the-street-on-green-light_28257902.mp4">Pedestrian 2</option>
+                        <option value="resources/vecteezy_people-crossing-the-street-on-green-light_28257902.mp4">
+                            Pedestrian 2</option>
                         <option value="resources/RoadTraffic1.mp4">Road Traffic 1</option>
                         <option value="resources/RoadTrafic2.mp4">Road Traffic 2</option>
                     </select>
@@ -79,22 +82,9 @@
     </div>
 
     <script>
-        let aiMode = null;
+        let aiMode = 'NonAI';
         let objectList = new Set();
         let selectedObject = '';
-<<<<<<< HEAD
-    
-        document.addEventListener('DOMContentLoaded', function() {
-            const rtspRadio = document.getElementById('rtsp-radio');
-            const sampleVideoRadio = document.getElementById('sample-video-radio');
-            const rtspLinkInput = document.getElementById('rtsp-link');
-            const localVideoDropdown = document.getElementById('local-video-dropdown');
-            const startStreamingButton = document.getElementById('start-streaming');
-    
-            rtspRadio.addEventListener('change', function() {
-                rtspLinkInput.disabled = false;
-                localVideoDropdown.disabled = true;
-=======
 
         // Reset data when changing AI modes
         function resetDetectionData() {
@@ -111,7 +101,7 @@
             toast.className = `toast ${type}`;
             toast.textContent = message;
             document.body.appendChild(toast);
-            
+
             setTimeout(() => {
                 toast.remove();
             }, 3000);
@@ -132,7 +122,7 @@
         function updateTextOutput(data) {
             const textOutput = document.getElementById('text-output');
             const objectSelector = document.getElementById('object-selector');
-            
+
             if (aiMode === 'AI2') {
                 textOutput.innerHTML = `Objects in boundary:<br>${formatObjectCounts(data)}`;
                 objectSelector.style.display = 'none';
@@ -153,7 +143,7 @@
         function updateObjectDropdown(data) {
             const dropdown = document.getElementById('object-dropdown');
             Object.keys(data).forEach(obj => objectList.add(obj));
-            
+
             // Only update options if they changed
             if (dropdown.options.length !== objectList.size + 1) {
                 dropdown.innerHTML = '<option value="">Select Object</option>';
@@ -167,12 +157,12 @@
         }
 
         // Add event listener for dropdown
-        document.getElementById('object-dropdown').addEventListener('change', function(e) {
-        if (e.target.value) {
-            selectedObject = e.target.value;
-            updateSelectedObjectCount();
-        }
-    });
+        document.getElementById('object-dropdown').addEventListener('change', function (e) {
+            if (e.target.value) {
+                selectedObject = e.target.value;
+                updateSelectedObjectCount();
+            }
+        });
 
         // Function to update count for selected object
         function updateSelectedObjectCount() {
@@ -183,279 +173,39 @@
                 },
                 body: JSON.stringify({ object: selectedObject })
             })
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('count-display').innerHTML = 
-                    `Obj Count: ${selectedObject}<br>Count: ${data.count}`;
->>>>>>> 1975386675fe043852e8aecb6358df86ac32103c
-            });
-    
-            sampleVideoRadio.addEventListener('change', function() {
-                rtspLinkInput.disabled = true;
-                localVideoDropdown.disabled = false;
-            });
-    
-            if (rtspRadio.checked) {
-                rtspLinkInput.disabled = false;
-                localVideoDropdown.disabled = true;
-            } else {
-                rtspLinkInput.disabled = true;
-                localVideoDropdown.disabled = false;
-            }
-    
-            startStreamingButton.addEventListener('click', function() {
-                const button = this;
-                setLoading(button, true);
-    
-                const rtspLink = rtspLinkInput.value;
-                const localVideoPath = localVideoDropdown.value;
-                const aiMode = 'noAI';
-    
-                let requestBody;
-                if (rtspRadio.checked) {
-                    if (!rtspLink) {
-                        showToast('RTSP link is required for RTSP streaming.', 'error');
-                        setLoading(button, false);
-                        return;
-                    }
-                    requestBody = `rtsp=${encodeURIComponent(rtspLink)}&ai_mode=${encodeURIComponent(aiMode)}`;
-                } else {
-                    requestBody = `local_video_path=${encodeURIComponent(localVideoPath)}&ai_mode=${encodeURIComponent(aiMode)}`;
-                }
-    
-                fetch('http://localhost:5001/start_streaming', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: requestBody,
-                })
-                .then(response => {
-                    if (response.ok) {
-<<<<<<< HEAD
-                        showToast('Streaming started successfully!', 'success');
-                        document.getElementById('video-stream').src = "http://localhost:5001/video_feed";
-                        document.getElementById('start-page').style.display = 'none';
-                        document.getElementById('stream-section').style.display = 'flex';
-                    } else {
-                        response.text().then(text => showToast(text, 'error'));
-                    }
-                })
-                .catch(error => showToast(error.message, 'error'))
-                .finally(() => setLoading(button, false));
-            });
-    
-            document.getElementById('stop-streaming').addEventListener('click', function() {
-                fetch('http://localhost:5001/stop_streaming', {
-                    method: 'POST',
-                })
-                .then(response => {
-                    if (response.ok) {
-                        showToast('Streaming stopped successfully!');
-                        document.getElementById('video-stream').src = "";
-                        document.getElementById('stream-section').style.display = 'none';
-                        document.getElementById('start-page').style.display = 'block';
-                    } else {
-                        response.text().then(text => showToast('Error: ' + text));
-                    }
-                })
-                .catch(error => showToast('Error: ' + error));
-            });
-    
-            window.addEventListener('beforeunload', function() {
-                fetch('http://localhost:5001/stop_streaming', {
-                    method: 'POST',
-                    keepalive: true 
-                });
-            });
-    
-            document.getElementById('AI1').addEventListener('click', function() {
-                aiMode = 'AI1';
-                updateAiMode(aiMode);
-            });
-    
-            document.getElementById('AI2').addEventListener('click', function() {
-                aiMode = 'AI2';
-                updateAiMode(aiMode);
-            });
-    
-            document.getElementById('AI3').addEventListener('click', function() {
-                aiMode = 'AI3';
-                updateAiMode(aiMode);
-            });
-    
-            document.getElementById('AI4').addEventListener('click', function() {
-                aiMode = 'AI4';
-                updateAiMode(aiMode);
-            });
-
-            document.getElementById('NonAI').addEventListener('click', function() {
-                aiMode = 'NonAI';
-                updateAiMode(aiMode);
-            });
-    
-            function updateAiMode(mode) {
-                fetch('http://localhost:5001/reset_data', {
-                    method: 'POST'
-                })
-                .then(() => {
-                    resetDetectionData();
-                    const infoBox = document.getElementById('info-box');
-                    if (mode === 'AI2' || mode === 'AI3') {
-                        infoBox.style.display = 'block';
-                    } else {
-                        infoBox.style.display = 'none';
-                    }
-                    fetch('http://localhost:5001/update_ai_mode', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                        },
-                        body: `ai_mode=${encodeURIComponent(mode)}`
-                    })
-                    .then(response => {
-                        if (response.ok) {
-                            showToast(`AI Mode updated to: ${mode}`);
-                            const videoStream = document.getElementById('video-stream');
-                            videoStream.src = '';
-                            setTimeout(() => {
-                                videoStream.src = `http://localhost:5001/video_feed?timestamp=${new Date().getTime()}`;
-                            }, 100);
-                        } else {
-                            response.text().then(text => showToast('Error: ' + text));
-                        }
-                    })
-                    .catch(error => showToast('Error: ' + error));
-                });
-            }
-    
-            function resetDetectionData() {
-                objectList.clear();
-                selectedObject = '';
-                const dropdown = document.getElementById('object-dropdown');
-                dropdown.innerHTML = '<option value="">Select Object</option>';
-                document.getElementById('text-output').innerHTML = '';
-                document.getElementById('count-display').innerHTML = '';
-            }
-    
-            function showToast(message, type = 'info') {
-                const toast = document.createElement('div');
-                toast.className = `toast ${type}`;
-                toast.textContent = message;
-                document.body.appendChild(toast);
-                setTimeout(() => {
-                    toast.remove();
-                }, 3000);
-            }
-    
-            function setLoading(button, isLoading) {
-                if (isLoading) {
-                    button.classList.add('loading');
-                    button.disabled = true;
-                } else {
-                    button.classList.remove('loading');
-                    button.disabled = false;
-                }
-            }
-    
-            function updateTextOutput(data) {
-                const textOutput = document.getElementById('text-output');
-                const objectSelector = document.getElementById('object-selector');
-                if (aiMode === 'AI2') {
-                    textOutput.innerHTML = `Objects in boundary:<br>${formatObjectCounts(data)}`;
-                    objectSelector.style.display = 'none';
-                } else if (aiMode === 'AI3') {
-                    objectSelector.style.display = 'block';
-                    updateObjectDropdown(data);
-                }
-            }
-    
-            function formatObjectCounts(data) {
-                return Object.entries(data)
-                    .map(([obj, count]) => `${obj}: ${count}`)
-                    .join('<br>');
-            }
-    
-            function updateObjectDropdown(data) {
-                const dropdown = document.getElementById('object-dropdown');
-                Object.keys(data).forEach(obj => objectList.add(obj));
-                if (dropdown.options.length !== objectList.size + 1) {
-                    dropdown.innerHTML = '<option value="">Select Object</option>';
-                    [...objectList].sort().forEach(obj => {
-                        const option = document.createElement('option');
-                        option.value = obj;
-                        option.textContent = obj;
-                        dropdown.appendChild(option);
-                    });
-                }
-            }
-    
-            document.getElementById('object-dropdown').addEventListener('change', function(e) {
-                if (e.target.value) {
-                    selectedObject = e.target.value;
-                    updateSelectedObjectCount();
-                }
-            });
-    
-            function updateSelectedObjectCount() {
-                fetch('http://localhost:5001/get_object_count', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ object: selectedObject })
-                })
                 .then(response => response.json())
                 .then(data => {
-                    document.getElementById('count-display').innerHTML = 
+                    document.getElementById('count-display').innerHTML =
                         `Obj Count: ${selectedObject}<br>Count: ${data.count}`;
                 });
-            }
-    
-            function startPeriodicUpdates() {
-                setInterval(() => {
-                    if (aiMode === 'AI2' || aiMode === 'AI3') {
-                        fetch('http://localhost:5001/get_detection_data')
-                        .then(response => response.json())
-                        .then(data => {
-                            if (Object.keys(data).length > 0) {
-                                updateTextOutput(data);
-                            }
-                        })
-                        .catch(error => console.error('Error fetching detection data:', error));
-                    }
-                }, 1000);
-            }
-    
-            startPeriodicUpdates();
-=======
-                        showToast(`AI Mode updated to: ${mode}`);
-                        const videoStream = document.getElementById('video-stream');
-                        videoStream.src = '';
-                        setTimeout(() => {
-                            videoStream.src = `http://localhost:5001/video_feed?timestamp=${new Date().getTime()}`;
-                        }, 100);
-                    } else {
-                        response.text().then(text => showToast('Error: ' + text));
-                    }
-                })
-                .catch(error => showToast('Error: ' + error));
-            });
         }
-        
+
         document.getElementById('start-streaming').addEventListener('click', function() {
             const button = this;
             setLoading(button, true);
-            
+
             const rtspLink = document.getElementById('rtsp-link').value;
-            const aiMode = 'noAI';
+            const localVideoPath = document.getElementById('local-video-dropdown').value;
+            const aiMode = 'NonAI';
+
+            let requestBody;
+            if (document.getElementById('rtsp-radio').checked) {
+                if (!rtspLink) {
+                    showToast('RTSP link is required for RTSP streaming.', 'error');
+                    setLoading(button, false);
+                    return;
+                }
+                requestBody = `rtspLink=${encodeURIComponent(rtspLink)}&ai_mode=${encodeURIComponent(aiMode)}`;
+            } else {
+                requestBody = `local_video_path=${encodeURIComponent(localVideoPath)}&ai_mode=${encodeURIComponent(aiMode)}`;
+            }
 
             fetch('http://localhost:5001/start_streaming', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
-                body: `rtsp=${encodeURIComponent(rtspLink)}&ai_mode=${encodeURIComponent(aiMode)}`,
+                body: requestBody,
             })
             .then(response => {
                 if (response.ok) {
@@ -477,27 +227,72 @@
             })
             .then(response => {
                 if (response.ok) {
-                    showToast('Streaming stopped successfully!');
+                    showToast('Streaming stopped successfully!', 'success');
                     document.getElementById('video-stream').src = "";
-                    document.getElementById('stream-section').style.display = 'none';
                     document.getElementById('start-page').style.display = 'block';
+                    document.getElementById('stream-section').style.display = 'none';
                 } else {
-                    response.text().then(text => showToast('Error: ' + text));
+                    response.text().then(text => showToast(text, 'error'));
                 }
             })
-            .catch(error => showToast('Error: ' + error));
+            .catch(error => showToast(error.message, 'error'));
         });
 
+        document.getElementById('AI1').addEventListener('click', function() {
+            changeAIMode('AI1');
+        });
+
+        document.getElementById('AI2').addEventListener('click', function() {
+            changeAIMode('AI2');
+        });
+
+        document.getElementById('AI3').addEventListener('click', function() {
+            changeAIMode('AI3');
+        });
+
+        document.getElementById('AI4').addEventListener('click', function() {
+            changeAIMode('AI4');
+        });
+
+        document.getElementById('NonAI').addEventListener('click', function() {
+            changeAIMode('NonAI');
+        });
+
+        function changeAIMode(newMode) {
+            if (aiMode === newMode) {
+                showToast(`AI mode is already set to ${newMode}`, 'info');
+                return;
+            }
+
+            fetch('http://localhost:5001/change_ai_mode', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `ai_mode=${encodeURIComponent(newMode)}`,
+            })
+            .then(response => {
+                if (response.ok) {
+                    aiMode = newMode;
+                    resetDetectionData();
+                    showToast(`AI mode changed to ${newMode}`, 'success');
+                } else {
+                    response.text().then(text => showToast(text, 'error'));
+                }
+            })
+            .catch(error => showToast(error.message, 'error'));
+        }
+
         // Handle page refresh/unload
-        window.addEventListener('beforeunload', function() {
+        window.addEventListener('beforeunload', function () {
             // Stop streaming when page is refreshed or closed
             fetch('http://localhost:5001/stop_streaming', {
                 method: 'POST',
                 // Use keepalive to ensure the request completes even if page is unloading
-                keepalive: true 
+                keepalive: true
             });
->>>>>>> 1975386675fe043852e8aecb6358df86ac32103c
         });
     </script>
 </body>
+
 </html>
