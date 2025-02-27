@@ -72,6 +72,64 @@
                             <div class="loading-text">Changing AI Mode...</div>
                         </div>
                     </div>
+                    <!-- Add this to your index.html file in the Dashboard folder -->
+                    <div id="boundary-controls" style="display: none;">
+                        <h3>Boundary Polygon Controls</h3>
+                        <div class="sliders">
+                            <div class="point-control">
+                                <p>Point 1:</p>
+                                <label>X: <span id="p1x-value"></span></label>
+                                <input type="range" id="p1x" min="0" max="1280" step="1">
+                                <label>Y: <span id="p1y-value"></span></label>
+                                <input type="range" id="p1y" min="0" max="720" step="1">
+                            </div>
+
+                            <div class="point-control">
+                                <p>Point 2:</p>
+                                <label>X: <span id="p2x-value"></span></label>
+                                <input type="range" id="p2x" min="0" max="1280" step="1">
+                                <label>Y: <span id="p2y-value"></span></label>
+                                <input type="range" id="p2y" min="0" max="720" step="1">
+                            </div>
+
+                            <div class="point-control">
+                                <p>Point 3:</p>
+                                <label>X: <span id="p3x-value"></span></label>
+                                <input type="range" id="p3x" min="0" max="1280" step="1">
+                                <label>Y: <span id="p3y-value"></span></label>
+                                <input type="range" id="p3y" min="0" max="720" step="1">
+                            </div>
+
+                            <div class="point-control">
+                                <p>Point 4:</p>
+                                <label>X: <span id="p4x-value"></span></label>
+                                <input type="range" id="p4x" min="0" max="1280" step="1">
+                                <label>Y: <span id="p4y-value"></span></label>
+                                <input type="range" id="p4y" min="0" max="720" step="1">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="line-controls" style="display: none;">
+                        <h3>Line Crossing Controls</h3>
+                        <div class="sliders">
+                            <div class="point-control">
+                                <p>Start Point:</p>
+                                <label>X: <span id="l1x-value"></span></label>
+                                <input type="range" id="l1x" min="0" max="1280" step="1">
+                                <label>Y: <span id="l1y-value"></span></label>
+                                <input type="range" id="l1y" min="0" max="720" step="1">
+                            </div>
+
+                            <div class="point-control">
+                                <p>End Point:</p>
+                                <label>X: <span id="l2x-value"></span></label>
+                                <input type="range" id="l2x" min="0" max="1280" step="1">
+                                <label>Y: <span id="l2y-value"></span></label>
+                                <input type="range" id="l2y" min="0" max="720" step="1">
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -88,13 +146,13 @@
             existingToasts.forEach(toast => {
                 toast.remove();
             });
-            
+
             // Create and show the new toast
             const toast = document.createElement('div');
             toast.className = `toast ${type}`;
             toast.textContent = message;
             document.body.appendChild(toast);
-        
+
             // Remove toast after animation completes
             setTimeout(() => {
                 if (toast.parentElement) {
@@ -121,31 +179,31 @@
             const loadingOverlay = document.getElementById('loading-overlay');
             document.querySelector('.loading-text').textContent = message;
             loadingOverlay.style.display = 'flex';
-            
+
             // Get the video element
             const oldImage = document.getElementById('video-stream');
-            
+
             // Create a new image element
             const newImage = document.createElement('img');
             newImage.id = 'video-stream';
             newImage.alt = 'Video Stream';
-            
+
             // Add event listeners to the new image
-            newImage.addEventListener('load', function() {
+            newImage.addEventListener('load', function () {
                 loadingOverlay.style.display = 'none';
                 showToast('Stream refreshed successfully', 'success');
             });
-            
-            newImage.addEventListener('error', function(e) {
+
+            newImage.addEventListener('error', function (e) {
                 console.error('Video stream loading error:', e);
                 loadingOverlay.style.display = 'none';
                 showToast('Error loading video stream', 'error');
             });
-            
+
             // Add timestamp to prevent caching
             const timestamp = new Date().getTime();
             newImage.src = `/video_feed?t=${timestamp}`;
-            
+
             // Replace old image with new one
             oldImage.parentNode.replaceChild(newImage, oldImage);
         }
@@ -154,22 +212,22 @@
         function setupStreamRefreshCheck() {
             let consecutiveEmptyFrames = 0;
             const maxEmptyFrames = 3;
-            
+
             // Check every 2 seconds
             const checkInterval = setInterval(() => {
                 const videoStream = document.getElementById('video-stream');
-                
+
                 if (!videoStream || document.getElementById('start-page').style.display !== 'none') {
                     // If we're not in streaming mode or video element doesn't exist
                     clearInterval(checkInterval);
                     return;
                 }
-                
+
                 // Check if the image is actually loaded with content
                 if (videoStream.complete && videoStream.naturalHeight <= 1) {
                     consecutiveEmptyFrames++;
                     console.log(`Potentially empty stream detected (${consecutiveEmptyFrames}/${maxEmptyFrames})`);
-                    
+
                     if (consecutiveEmptyFrames >= maxEmptyFrames) {
                         console.log('Stream appears to be frozen, refreshing...');
                         refreshVideoStream('Auto-refreshing frozen stream...');
@@ -179,7 +237,7 @@
                     consecutiveEmptyFrames = 0;
                 }
             }, 2000);
-            
+
             // Stop checking after 60 seconds
             setTimeout(() => {
                 clearInterval(checkInterval);
@@ -192,17 +250,17 @@
                 showToast(`AI mode is already set to ${newMode}`, 'info');
                 return;
             }
-            
+
             // Show loading overlay
             document.getElementById('loading-overlay').style.display = 'flex';
             document.querySelector('.loading-text').textContent = `Changing to ${newMode} mode...`;
-            
+
             // Disable all AI mode buttons while changing
             const aiButtons = ['AI1', 'AI2', 'AI3', 'AI4', 'NonAI'];
             aiButtons.forEach(id => {
                 document.getElementById(id).disabled = true;
             });
-            
+
             fetch('/change_ai_mode', {
                 method: 'POST',
                 headers: {
@@ -210,41 +268,44 @@
                 },
                 body: `ai_mode=${encodeURIComponent(newMode)}`,
             })
-            .then(response => response.text())
-            .then(text => {
-                if (text.includes("changed")) {  // Ensure API response is correct
-                    aiMode = newMode;
-                    
-                    // Wait a moment for the server to switch AI modes
-                    setTimeout(() => {
-                        // Use our refresh function
-                        refreshVideoStream(`Switching to ${newMode} mode...`);
-                        showToast(`AI mode changed to ${newMode}`, 'success');
+                .then(response => response.text())
+                .then(text => {
+                    if (text.includes("changed")) {  // Ensure API response is correct
+                        aiMode = newMode;
 
-                        setupStreamRefreshCheck();
-                    }, 500);
-                } else {
-                    showToast(text, 'error');
+                        // Update the control visibility based on the new mode
+                        updateControlVisibility(newMode);
+
+                        // Wait a moment for the server to switch AI modes
+                        setTimeout(() => {
+                            // Use our refresh function
+                            refreshVideoStream(`Switching to ${newMode} mode...`);
+                            showToast(`AI mode changed to ${newMode}`, 'success');
+
+                            setupStreamRefreshCheck();
+                        }, 500);
+                    } else {
+                        showToast(text, 'error');
+                        document.getElementById('loading-overlay').style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    showToast('Error: ' + error.message, 'error');
+                    console.error('AI mode change error:', error);
                     document.getElementById('loading-overlay').style.display = 'none';
-                }
-            })
-            .catch(error => {
-                showToast('Error: ' + error.message, 'error');
-                console.error('AI mode change error:', error);
-                document.getElementById('loading-overlay').style.display = 'none';
-            })
-            .finally(() => {
-                // Re-enable all AI mode buttons
-                setTimeout(() => {
-                    aiButtons.forEach(id => {
-                        document.getElementById(id).disabled = false;
-                    });
-                }, 1000);
-            });
+                })
+                .finally(() => {
+                    // Re-enable all AI mode buttons
+                    setTimeout(() => {
+                        aiButtons.forEach(id => {
+                            document.getElementById(id).disabled = false;
+                        });
+                    }, 1000);
+                });
         }
 
         // Start streaming event handler
-        document.getElementById('start-streaming').addEventListener('click', function() {
+        document.getElementById('start-streaming').addEventListener('click', function () {
             const button = this;
             setLoading(button, true);
 
@@ -272,90 +333,90 @@
                 },
                 body: requestBody,
             })
-            .then(response => {
-                if (response.ok) {
-                    showToast('Streaming started successfully!', 'success');
-                    document.getElementById('video-stream').src = "/video_feed";
-                    document.getElementById('start-page').style.display = 'none';
-                    document.getElementById('stream-section').style.display = 'flex';
-                    
-                    // Set up auto-refresh check
-                    setupStreamRefreshCheck();
-                } else {
-                    return response.text().then(text => {
-                        throw new Error(text || 'Error starting stream');
-                    });
-                }
-            })
-            .catch(error => {
-                showToast('Error: ' + error.message, 'error');
-                console.error('Streaming error:', error);
-            })
-            .finally(() => setLoading(button, false));
+                .then(response => {
+                    if (response.ok) {
+                        showToast('Streaming started successfully!', 'success');
+                        document.getElementById('video-stream').src = "/video_feed";
+                        document.getElementById('start-page').style.display = 'none';
+                        document.getElementById('stream-section').style.display = 'flex';
+
+                        // Set up auto-refresh check
+                        setupStreamRefreshCheck();
+                    } else {
+                        return response.text().then(text => {
+                            throw new Error(text || 'Error starting stream');
+                        });
+                    }
+                })
+                .catch(error => {
+                    showToast('Error: ' + error.message, 'error');
+                    console.error('Streaming error:', error);
+                })
+                .finally(() => setLoading(button, false));
         });
 
         // Stop streaming event handler
-        document.getElementById('stop-streaming').addEventListener('click', function() {
-        // Set the flag to true before stopping
-        isIntentionalStop = true;
-        
-        fetch('/stop_streaming', {
-            method: 'POST',
-        })
-        .then(response => {
-            if (response.ok) {
-                showToast('Streaming stopped successfully!', 'success');
-                document.getElementById('video-stream').src = "";
-                document.getElementById('start-page').style.display = 'block';
-                document.getElementById('stream-section').style.display = 'none';
-            } else {
-                response.text().then(text => showToast(text, 'error'));
-            }
-        })
-        .catch(error => showToast(error.message, 'error'))
-        .finally(() => {
-            // Reset the flag after a short delay
-            setTimeout(() => {
-                isIntentionalStop = false;
-            }, 500);
+        document.getElementById('stop-streaming').addEventListener('click', function () {
+            // Set the flag to true before stopping
+            isIntentionalStop = true;
+
+            fetch('/stop_streaming', {
+                method: 'POST',
+            })
+                .then(response => {
+                    if (response.ok) {
+                        showToast('Streaming stopped successfully!', 'success');
+                        document.getElementById('video-stream').src = "";
+                        document.getElementById('start-page').style.display = 'block';
+                        document.getElementById('stream-section').style.display = 'none';
+                    } else {
+                        response.text().then(text => showToast(text, 'error'));
+                    }
+                })
+                .catch(error => showToast(error.message, 'error'))
+                .finally(() => {
+                    // Reset the flag after a short delay
+                    setTimeout(() => {
+                        isIntentionalStop = false;
+                    }, 500);
+                });
         });
-    });
 
         // Add refresh button event listener
-        document.getElementById('refresh-stream').addEventListener('click', function() {
+        document.getElementById('refresh-stream').addEventListener('click', function () {
             refreshVideoStream('Manually refreshing video stream...');
         });
 
         // AI mode button event listeners
-        document.getElementById('AI1').addEventListener('click', function() {
+        document.getElementById('AI1').addEventListener('click', function () {
             changeAIMode('AI1');
         });
 
-        document.getElementById('AI2').addEventListener('click', function() {
+        document.getElementById('AI2').addEventListener('click', function () {
             changeAIMode('AI2');
         });
 
-        document.getElementById('AI3').addEventListener('click', function() {
+        document.getElementById('AI3').addEventListener('click', function () {
             changeAIMode('AI3');
         });
 
-        document.getElementById('AI4').addEventListener('click', function() {
+        document.getElementById('AI4').addEventListener('click', function () {
             changeAIMode('AI4');
         });
 
-        document.getElementById('NonAI').addEventListener('click', function() {
+        document.getElementById('NonAI').addEventListener('click', function () {
             changeAIMode('NonAI');
         });
 
         // Add event listeners for video stream loading states
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             const videoStream = document.getElementById('video-stream');
             if (videoStream) {
-                videoStream.addEventListener('load', function() {
+                videoStream.addEventListener('load', function () {
                     document.getElementById('loading-overlay').style.display = 'none';
                 });
-                
-                videoStream.addEventListener('error', function(e) {
+
+                videoStream.addEventListener('error', function (e) {
                     // Only show error if it's not from intentionally stopping the stream
                     if (!isIntentionalStop) {
                         console.error('Video stream loading error:', e);
@@ -364,7 +425,7 @@
                     }
                 });
             }
-            
+
             // Initialize radio button behavior
             handleRadioChange();
         });
@@ -373,11 +434,11 @@
         function checkVideoStreamStatus() {
             const videoStream = document.getElementById('video-stream');
             const streamSection = document.getElementById('stream-section');
-            
+
             if (streamSection.style.display === 'none') {
                 return; // Don't check if we're not in streaming mode
             }
-            
+
             if (videoStream && videoStream.complete) {
                 if (videoStream.naturalHeight <= 1) {
                     console.log('Detected potentially broken stream');
@@ -406,18 +467,18 @@
             const rtspRadio = document.getElementById('rtsp-radio');
             const rtspLink = document.getElementById('rtsp-link');
             const localVideoDropdown = document.getElementById('local-video-dropdown');
-            
+
             // Set initial state on page load
             rtspLink.disabled = !rtspRadio.checked;
             localVideoDropdown.disabled = rtspRadio.checked;
-            
+
             // Add event listeners to radio buttons
-            document.getElementById('rtsp-radio').addEventListener('change', function() {
+            document.getElementById('rtsp-radio').addEventListener('change', function () {
                 rtspLink.disabled = false;
                 localVideoDropdown.disabled = true;
             });
-            
-            document.getElementById('sample-video-radio').addEventListener('change', function() {
+
+            document.getElementById('sample-video-radio').addEventListener('change', function () {
                 rtspLink.disabled = true;
                 localVideoDropdown.disabled = false;
             });
@@ -425,6 +486,153 @@
 
         // Run the function when the page loads
         document.addEventListener('DOMContentLoaded', handleRadioChange);
+        // Add this to your JavaScript file
+
+        // Load initial values and setup event handlers
+        function initializeControls() {
+            // Initially hide the controls
+            document.getElementById('boundary-controls').style.display = 'none';
+            document.getElementById('line-controls').style.display = 'none';
+
+            // Get initial values from the server
+            fetch('/get_boundary')
+                .then(response => response.json())
+                .then(data => {
+                    const points = data.points;
+
+                    // Set slider values
+                    document.getElementById('p1x').value = points[0];
+                    document.getElementById('p1y').value = points[1];
+                    document.getElementById('p2x').value = points[2];
+                    document.getElementById('p2y').value = points[3];
+                    document.getElementById('p3x').value = points[4];
+                    document.getElementById('p3y').value = points[5];
+                    document.getElementById('p4x').value = points[6];
+                    document.getElementById('p4y').value = points[7];
+
+                    // Update value displays
+                    updateBoundaryValueDisplays();
+                });
+
+            fetch('/get_line')
+                .then(response => response.json())
+                .then(data => {
+                    const points = data.points;
+
+                    // Set slider values
+                    document.getElementById('l1x').value = points[0];
+                    document.getElementById('l1y').value = points[1];
+                    document.getElementById('l2x').value = points[2];
+                    document.getElementById('l2y').value = points[3];
+
+                    // Update value displays
+                    updateLineValueDisplays();
+                });
+
+            // Add event listeners to all boundary sliders
+            const boundarySliders = ['p1x', 'p1y', 'p2x', 'p2y', 'p3x', 'p3y', 'p4x', 'p4y'];
+            boundarySliders.forEach(id => {
+                document.getElementById(id).addEventListener('input', function () {
+                    updateBoundaryValueDisplays();
+                });
+
+                document.getElementById(id).addEventListener('change', function () {
+                    sendBoundaryUpdate();
+                });
+            });
+
+            // Add event listeners to all line sliders
+            const lineSliders = ['l1x', 'l1y', 'l2x', 'l2y'];
+            lineSliders.forEach(id => {
+                document.getElementById(id).addEventListener('input', function () {
+                    updateLineValueDisplays();
+                });
+
+                document.getElementById(id).addEventListener('change', function () {
+                    sendLineUpdate();
+                });
+            });
+        }
+
+        // Show/hide controls based on selected AI mode
+        function updateControlVisibility(mode) {
+            document.getElementById('boundary-controls').style.display = mode === 'AI2' ? 'block' : 'none';
+            document.getElementById('line-controls').style.display = mode === 'AI3' ? 'block' : 'none';
+        }
+
+        // Update the displayed values for boundary sliders
+        function updateBoundaryValueDisplays() {
+            document.getElementById('p1x-value').textContent = document.getElementById('p1x').value;
+            document.getElementById('p1y-value').textContent = document.getElementById('p1y').value;
+            document.getElementById('p2x-value').textContent = document.getElementById('p2x').value;
+            document.getElementById('p2y-value').textContent = document.getElementById('p2y').value;
+            document.getElementById('p3x-value').textContent = document.getElementById('p3x').value;
+            document.getElementById('p3y-value').textContent = document.getElementById('p3y').value;
+            document.getElementById('p4x-value').textContent = document.getElementById('p4x').value;
+            document.getElementById('p4y-value').textContent = document.getElementById('p4y').value;
+        }
+
+        // Update the displayed values for line sliders
+        function updateLineValueDisplays() {
+            document.getElementById('l1x-value').textContent = document.getElementById('l1x').value;
+            document.getElementById('l1y-value').textContent = document.getElementById('l1y').value;
+            document.getElementById('l2x-value').textContent = document.getElementById('l2x').value;
+            document.getElementById('l2y-value').textContent = document.getElementById('l2y').value;
+        }
+
+        // Send boundary updates to the server
+        function sendBoundaryUpdate() {
+            const points = [
+                parseInt(document.getElementById('p1x').value),
+                parseInt(document.getElementById('p1y').value),
+                parseInt(document.getElementById('p2x').value),
+                parseInt(document.getElementById('p2y').value),
+                parseInt(document.getElementById('p3x').value),
+                parseInt(document.getElementById('p3y').value),
+                parseInt(document.getElementById('p4x').value),
+                parseInt(document.getElementById('p4y').value)
+            ];
+
+            fetch('/update_boundary', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ points: points }),
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        console.error('Failed to update boundary');
+                    }
+                });
+        }
+
+        // Send line updates to the server
+        function sendLineUpdate() {
+            const points = [
+                parseInt(document.getElementById('l1x').value),
+                parseInt(document.getElementById('l1y').value),
+                parseInt(document.getElementById('l2x').value),
+                parseInt(document.getElementById('l2y').value)
+            ];
+
+            fetch('/update_line', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ points: points }),
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        console.error('Failed to update line');
+                    }
+                });
+        }
+
+        // Initialize controls when page loads
+        document.addEventListener('DOMContentLoaded', initializeControls);
     </script>
 </body>
+
 </html>

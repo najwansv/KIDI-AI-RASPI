@@ -134,6 +134,68 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
     return response
 
+# Add these new routes after your existing routes
+
+@app.route('/get_boundary', methods=['GET'])
+def get_boundary():
+    global BOUNDARY_POLYGON
+    points = BOUNDARY_POLYGON.reshape(-1).tolist()
+    return {"points": points}, 200
+
+@app.route('/update_boundary', methods=['POST'])
+def update_boundary():
+    global BOUNDARY_POLYGON, ai, current_ai_key
+    
+    try:
+        points = request.json.get('points')
+        if not points or len(points) != 8:  # 4 points × 2 coords
+            return "Invalid points data", 400
+            
+        # Update the boundary polygon
+        new_polygon = np.array([(points[0], points[1]), 
+                              (points[2], points[3]), 
+                              (points[4], points[5]), 
+                              (points[6], points[7])], np.int32)
+        BOUNDARY_POLYGON = new_polygon
+        
+        # Update the active instance if it's a boundary counter
+        if current_ai_key == "AI2" and ai:
+            ai.update_boundary(BOUNDARY_POLYGON)
+            
+        return "Boundary updated", 200
+    except Exception as e:
+        logging.error(f"Error updating boundary: {e}")
+        return f"Error: {str(e)}", 500
+
+@app.route('/get_line', methods=['GET'])
+def get_line():
+    global LINE_POINTS
+    # Flatten the points into a single array [x1, y1, x2, y2]
+    flat_points = [coord for point in LINE_POINTS for coord in point]
+    return {"points": flat_points}, 200
+
+@app.route('/update_line', methods=['POST'])
+def update_line():
+    global LINE_POINTS, ai, current_ai_key
+    
+    try:
+        points = request.json.get('points')
+        if not points or len(points) != 4:  # 2 points × 2 coords
+            return "Invalid points data", 400
+            
+        # Update the line points
+        new_line = [(points[0], points[1]), (points[2], points[3])]
+        LINE_POINTS = new_line
+        
+        # Update the active instance if it's a line crossing counter
+        if current_ai_key == "AI3" and ai:
+            ai.update_line(LINE_POINTS)
+            
+        return "Line updated", 200
+    except Exception as e:
+        logging.error(f"Error updating line: {e}")
+        return f"Error: {str(e)}", 500
+
 # Improve the start_streaming route with better error handling
 @app.route('/start_streaming', methods=['POST'])
 def start_streaming():

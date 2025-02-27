@@ -304,6 +304,9 @@ class BoundaryObjectCounter(BaseHailoAI):
         super().__init__(source, hef_path, post_process_so)
         self.boundary_polygon = boundary_polygon
         self.inside_objects = {}
+        
+    def update_boundary(self, new_boundary):
+        self.boundary_polygon = new_boundary
 
     def is_inside_polygon(self, bbox, polygon):
         # Compute the center of the bounding box
@@ -363,7 +366,10 @@ class LineCrossingCounter(BaseHailoAI):
         self.line_points = line_points # expects two endpoints: [(x1, y1), (x2, y2)] 
         self.last_side = {} # tracking last known side for each object (by unique ID) 
         self.crossing_counts = {} # crossing counts per label
-        
+    
+    def update_line(self, new_line):
+        self.line_points = new_line
+    
     def get_line_side(self, point):
         """
         Given a point, determine its position relative to the line defined by self.line_points.
