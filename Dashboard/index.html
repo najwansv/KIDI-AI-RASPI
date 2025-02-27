@@ -360,6 +360,10 @@
             // Set the flag to true before stopping
             isIntentionalStop = true;
 
+            aiMode = 'NonAI';  // Reset AI mode to NonAI
+            document.getElementById('boundary-controls').style.display = 'none';
+            document.getElementById('line-controls').style.display = 'none';
+
             fetch('/stop_streaming', {
                 method: 'POST',
             })
@@ -632,6 +636,19 @@
 
         // Initialize controls when page loads
         document.addEventListener('DOMContentLoaded', initializeControls);
+
+        // Add event listener for page unload/refresh to stop streaming
+        window.addEventListener('beforeunload', function(e) {
+            // Only attempt to stop if we're currently streaming
+            if (document.getElementById('stream-section').style.display !== 'none') {
+                // Using sendBeacon for more reliable delivery during page unload
+                navigator.sendBeacon('/stop_streaming');
+                console.log('Stream stop request sent due to page refresh');
+            }
+            aiMode = 'NonAI';  // Reset AI mode to NonAI
+            document.getElementById('boundary-controls').style.display = 'none';
+            document.getElementById('line-controls').style.display = 'none';
+        });
     </script>
 </body>
 

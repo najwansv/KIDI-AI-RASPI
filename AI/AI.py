@@ -33,6 +33,21 @@ class HailoDeviceManager:
     def release_device(self):
         with self.lock:
             self.device_in_use = False
+            
+    def force_reset(self):
+        """Force reset the device state"""
+        logging.debug("Forcing Hailo device reset")
+        with self.lock:
+            self.device_in_use = False
+            # Try to physically reset the device if needed
+            try:
+                # This is a more aggressive cleanup
+                gc.collect()
+                # Optional: system-level device reset if available
+                import os
+                os.system("sudo systemctl restart hailo-firmware.service 2>/dev/null || true")
+            except Exception as e:
+                logging.error(f"Error during force reset: {e}")
 
 class BaseHailoAI:
     def __init__(self, source, hef_path, post_process_so, width=1280, height=720):
@@ -115,8 +130,8 @@ class BaseHailoAI:
         return (
                 f'filesrc location={self.source} ! '
                 'queue name=source_queue_decode leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! '
-                'decodebin ! videoconvert ! '
-                'video/x-raw, pixel-aspect-ratio=1/1, format=RGB, width=1280, height=720 ! '
+                'decodebin ! videoconvert n-threads=3 ! videoscale method=0 ! '
+                f'video/x-raw, format=RGB, width={self.width}, height={self.height} ! '
                 'queue name=inference_wrapper_input_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0 ! '
                 'hailocropper name=inference_wrapper_crop so-path=/usr/lib/aarch64-linux-gnu/hailo/tappas/post_processes/cropping_algorithms/libwhole_buffer.so '
                 'function-name=create_crops use-letterbox=true resize-method=inter-area internal-offset=true '
@@ -447,8 +462,11 @@ class LineCrossingCounter(BaseHailoAI):
 class FaceDetection(BaseHailoAI):
     def __init__(self, source,
                  hef_path="/home/pi/Documents/KIDI-AI-RASPI/Model/retinaface_mobilenet_v1.hef",
-                 post_process_so="/home/pi/Documents/KIDI-AI-RASPI/Model/libface_detection_post.so"):
+                 post_process_so="/home/pi/Documents/KIDI-AI-RASPI/Model/libface_detection_post.so",
+                 width=1280, height=720):
         self.filter_function_name = "retinaface"
+        self.width = width
+        self.height = height
         super().__init__(source, hef_path, post_process_so)
 
     def create_pipeline(self):
@@ -579,10 +597,11 @@ class NonAI(BaseHailoAI):
     def build_file_pipeline(self):
         return (
             f'filesrc location={self.source} ! '
-            'queue name=source_queue_decode leaky=no max-size-buffers=3 ! '
-            'decodebin ! videoconvert ! '
+            'decodebin ! '  # Use decodebin instead of specific decoder
+            'videoconvert ! '
+            'videoscale ! '
             f'video/x-raw, format=RGB, width={self.width}, height={self.height} ! '
-            'appsink name=appsink emit-signals=True sync=False'
+            'appsink name=appsink emit-signals=True sync=False max-buffers=1 drop=True'
         )
 
     def process_detections(self, frame, detections):

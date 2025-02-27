@@ -51,15 +51,18 @@ def switch_ai(new_ai_key):
             if ai_thread.is_alive():
                 logging.warning("AI thread did not terminate properly")
         
-        # Release Hailo device if current mode uses it
-        if current_ai_key != "NonAI":
-            device_manager.release_device()
-            logging.debug("Hailo device released")
+        # Force device release regardless of current mode
+        device_manager.release_device()
+        
+        # If switching to an AI mode (not NonAI), force reset the device
+        if new_ai_key != "NonAI":
+            device_manager.force_reset()
+            time.sleep(2)  # Give time for reset to complete
         
         # Force aggressive garbage collection
         gc.collect()
         gc.collect()
-        time.sleep(2)
+        time.sleep(1)
         
         # Remove the old instance to ensure complete cleanup
         if current_ai_key in ai_instances:
@@ -72,20 +75,25 @@ def switch_ai(new_ai_key):
                 if new_ai_key == "NonAI":
                     ai_instances[new_ai_key] = NonAI(source)
                 else:
-                    # Try to acquire Hailo device for AI modes
-                    for attempt in range(3):  # Try multiple times
+                    # Try to acquire Hailo device for AI modes with more retries
+                    device_acquired = False
+                    for attempt in range(5):  # Increase retry attempts
                         if device_manager.acquire_device():
+                            device_acquired = True
                             logging.debug("Hailo device acquired successfully")
                             break
-                        logging.warning(f"Hailo device acquisition attempt {attempt+1} failed, retrying...")
-                        time.sleep(1)
-                    else:  # No break occurred in the loop
+                        else:
+                            logging.warning(f"Hailo device acquisition attempt {attempt+1} failed, retrying...")
+                            device_manager.force_reset()  # Try resetting between attempts
+                            time.sleep(2)
+                    
+                    if not device_acquired:
                         logging.error("Could not acquire Hailo device - already in use")
                         # Fall back to NonAI mode
                         new_ai_key = "NonAI"
                         ai_instances[new_ai_key] = NonAI(source)
-                        
-                    if new_ai_key != "NonAI":
+                    else:
+                        # Create appropriate AI instance
                         if new_ai_key == "AI1":
                             ai_instances[new_ai_key] = AllObjectDetection(source)
                         elif new_ai_key == "AI2":
@@ -94,34 +102,45 @@ def switch_ai(new_ai_key):
                             ai_instances[new_ai_key] = LineCrossingCounter(source, LINE_POINTS)
                         elif new_ai_key == "AI4":
                             ai_instances[new_ai_key] = FaceDetection(source)
+                
+                current_ai_key = new_ai_key
+                ai = ai_instances[current_ai_key]
+                logging.debug(f"Updated AI instance to {current_ai_key}")
+                
+                # Start in a new thread
+                ai_thread = threading.Thread(target=ai.run)
+                ai_thread.daemon = True
+                ai_thread.start()
+                
+                logging.debug(f"New AI instance {current_ai_key} started")
+                return True
             except Exception as e:
                 logging.error(f"Error creating AI instance: {e}")
+                # Fall back to NonAI
                 new_ai_key = "NonAI"
-                if "NonAI" not in ai_instances:
-                    ai_instances["NonAI"] = NonAI(source)
+                ai_instances[new_ai_key] = NonAI(source)
+                current_ai_key = new_ai_key
+                ai = ai_instances[current_ai_key]
+                
+                ai_thread = threading.Thread(target=ai.run)
+                ai_thread.daemon = True
+                ai_thread.start()
+                return False
         
-        # Update the current AI instance
+        # Use existing instance
         current_ai_key = new_ai_key
         ai = ai_instances[current_ai_key]
-        logging.debug(f"Updated AI instance to {type(ai).__name__}")
         
-        # Start the AI instance in a new thread
+        # Start in a new thread
         ai_thread = threading.Thread(target=ai.run)
-        ai_thread.daemon = True  # Make thread daemon so it exits when main thread exits
+        ai_thread.daemon = True
         ai_thread.start()
+        
         logging.debug(f"New AI instance {current_ai_key} started")
         return True
         
     except Exception as e:
-        logging.error(f"Error during AI switch: {e}")
-        # Recovery action - try to go back to NonAI mode
-        current_ai_key = "NonAI"
-        if "NonAI" not in ai_instances:
-            ai_instances["NonAI"] = NonAI(source)
-        ai = ai_instances["NonAI"]
-        ai_thread = threading.Thread(target=ai.run)
-        ai_thread.daemon = True
-        ai_thread.start()
+        logging.error(f"Error in switch_ai: {e}")
         return False
 
 # Add this function to set CORS headers manually
@@ -215,44 +234,89 @@ def start_streaming():
         
         logging.debug(f"Using Source: {source}")
         
-        # Stop any existing AI
+        # Stop any existing AI with proper cleanup
         if ai:
-            ai.stop()
-            if ai_thread and ai_thread.is_alive():
-                ai_thread.join(timeout=5)
+            try:
+                ai.stop()
+                logging.debug("Waiting for AI thread to terminate...")
+                if ai_thread and ai_thread.is_alive():
+                    ai_thread.join(timeout=5)
+                    if ai_thread.is_alive():
+                        logging.warning("AI thread didn't terminate properly, forcing cleanup")
+            except Exception as e:
+                logging.error(f"Error stopping AI: {e}")
         
         # Release device if it's being held
-        if current_ai_key != "NonAI":
+        if current_ai_key and current_ai_key != "NonAI":
             device_manager.release_device()
+        
+        # Force garbage collection
+        gc.collect()
+        gc.collect()
+        
+        # Add a small delay to ensure resources are released
+        time.sleep(1)
         
         # Clear instances
         ai_instances.clear()
         
         # Create new instance with new source
-        ai_instances["NonAI"] = NonAI(source)
-        current_ai_key = "NonAI"
-        ai = ai_instances[current_ai_key]
-        ai_thread = threading.Thread(target=ai.run)
-        ai_thread.daemon = True
-        ai_thread.start()
-        
-        return "Streaming started", 200
+        try:
+            ai_instances["NonAI"] = NonAI(source)
+            current_ai_key = "NonAI"
+            ai = ai_instances[current_ai_key]
+            
+            # Start in a new thread
+            ai_thread = threading.Thread(target=ai.run)
+            ai_thread.daemon = True
+            ai_thread.start()
+            
+            return "Streaming started", 200
+        except Exception as e:
+            logging.error(f"Error creating streaming instance: {e}")
+            # Reset global variables on failure
+            ai = None
+            current_ai_key = None
+            return f"Error starting stream: {str(e)}", 500
+            
     except Exception as e:
-        logging.error(f"Error starting stream: {e}")
+        logging.error(f"Error in start_streaming: {e}")
         return f"Error starting stream: {str(e)}", 500
 
 @app.route('/stop_streaming', methods=['POST'])
 def stop_streaming():
-    global ai, ai_thread
+    global ai, ai_thread, current_ai_key
     
-    if ai:
-        if hasattr(ai, 'stop'):
-            ai.stop()
-        if ai_thread and ai_thread.is_alive():
-            ai_thread.join(timeout=5)
-        return "Streaming stopped", 200
-    
-    return "No streaming process to stop", 400
+    try:
+        if ai:
+            logging.debug("Stopping AI instance...")
+            if hasattr(ai, 'stop'):
+                ai.stop()
+            
+            if ai_thread and ai_thread.is_alive():
+                ai_thread.join(timeout=5)
+                if ai_thread.is_alive():
+                    logging.warning("AI thread didn't terminate properly")
+            
+            # Release device if it's being held
+            if current_ai_key and current_ai_key != "NonAI":
+                device_manager.release_device()
+            
+            # Force garbage collection
+            gc.collect()
+            
+            # Reset global variables
+            ai = None
+            ai_thread = None
+            current_ai_key = None
+            
+            logging.debug("Stream stopped successfully")
+            return "Streaming stopped", 200
+        
+        return "No streaming process to stop", 200  # Return 200 even if nothing to stop
+    except Exception as e:
+        logging.error(f"Error stopping stream: {e}")
+        return f"Error stopping stream: {str(e)}", 500
 
 @app.route('/video_feed')
 def video_feed():
