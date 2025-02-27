@@ -21,16 +21,14 @@ BOUNDARY_POLYGON = np.array([(300, 200), (1000, 200), (800, 600), (200, 600)], n
 LINE_POINTS = [(800, 0), (800, 1000)]  # adjust coordinates as needed
 
 # Source URL for the video stream (can be changed via API)
-source = "resources/RoadTrafic2.mp4"
+# source = "resources/RoadTrafic2.mp4"  # Default source, but don't start streaming
 
-# Initialize AI management
+# Initialize AI management variables without starting anything
 ai_instances = {}
 device_manager = HailoDeviceManager.get_instance()
-ai_instances["NonAI"] = NonAI(source)
-current_ai_key = "NonAI"
-ai = ai_instances[current_ai_key]
-ai_thread = threading.Thread(target=ai.run)
-ai_thread.start()
+current_ai_key = None
+ai = None
+ai_thread = None
 
 def switch_ai(new_ai_key):
     global current_ai_key, ai, ai_thread, source
@@ -258,9 +256,26 @@ def stop_streaming():
 
 @app.route('/video_feed')
 def video_feed():
-    return Response(ai.generate_frames(), 
-                   mimetype='multipart/x-mixed-replace; boundary=frame')
-
+    if ai is None:
+        # Return a static image or error message when no streaming is active
+        def generate_placeholder():
+            placeholder = np.ones((480, 640, 3), dtype=np.uint8) * 128  # Gray placeholder
+            import cv2
+            # Add text to the placeholder
+            cv2.putText(placeholder, "No active stream", (180, 240), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            while True:
+                _, jpeg = cv2.imencode('.jpg', placeholder)
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
+                time.sleep(1)  # Update placeholder image less frequently
+        
+        return Response(generate_placeholder(), 
+                       mimetype='multipart/x-mixed-replace; boundary=frame')
+    else:
+        return Response(ai.generate_frames(), 
+                       mimetype='multipart/x-mixed-replace; boundary=frame')
+        
 @app.route('/change_ai_mode', methods=['POST'])
 def change_ai_mode():
     new_mode = request.form.get('ai_mode')
