@@ -1,0 +1,244 @@
+import os
+import threading
+from threading import Thread
+import time
+import gc
+import logging
+from flask import Flask, Response, request, send_from_directory, render_template
+import numpy as np
+
+# Import AI classes
+from AI.AI import AllObjectDetection, NonAI, BoundaryObjectCounter, LineCrossingCounter, FaceDetection, HailoDeviceManager
+
+# Flask app setup
+app = Flask(__name__, template_folder='templates')
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Global variables
+BOUNDARY_POLYGON = np.array([(300, 200), (1000, 200), (800, 600), (200, 600)], np.int32)
+LINE_POINTS = [(800, 0), (800, 1000)]  # adjust coordinates as needed
+
+# Source URL for the video stream (can be changed via API)
+source = "resources/RoadTrafic2.mp4"
+
+# Initialize AI management
+ai_instances = {}
+device_manager = HailoDeviceManager.get_instance()
+ai_instances["NonAI"] = NonAI(source)
+current_ai_key = "NonAI"
+ai = ai_instances[current_ai_key]
+ai_thread = threading.Thread(target=ai.run)
+ai_thread.start()
+
+def switch_ai(new_ai_key):
+    global current_ai_key, ai, ai_thread, source
+    
+    # Prevent switching to the same instance
+    if new_ai_key == current_ai_key:
+        logging.debug(f"Already in {new_ai_key} mode; no switch performed.")
+        return False
+    
+    logging.debug(f"Switching from {current_ai_key} to {new_ai_key}")
+    
+    try:
+        # Stop the current AI instance
+        if ai:
+            ai.stop()
+            
+        # Join the thread with timeout to avoid hanging
+        if ai_thread and ai_thread.is_alive():
+            ai_thread.join(timeout=10)
+            if ai_thread.is_alive():
+                logging.warning("AI thread did not terminate properly")
+        
+        # Release Hailo device if current mode uses it
+        if current_ai_key != "NonAI":
+            device_manager.release_device()
+            logging.debug("Hailo device released")
+        
+        # Force aggressive garbage collection
+        gc.collect()
+        gc.collect()
+        time.sleep(2)
+        
+        # Remove the old instance to ensure complete cleanup
+        if current_ai_key in ai_instances:
+            ai_instances.pop(current_ai_key, None)
+        
+        # Create new AI instance with proper error handling
+        if new_ai_key not in ai_instances:
+            logging.debug(f"Creating new instance for {new_ai_key}")
+            try:
+                if new_ai_key == "NonAI":
+                    ai_instances[new_ai_key] = NonAI(source)
+                else:
+                    # Try to acquire Hailo device for AI modes
+                    for attempt in range(3):  # Try multiple times
+                        if device_manager.acquire_device():
+                            logging.debug("Hailo device acquired successfully")
+                            break
+                        logging.warning(f"Hailo device acquisition attempt {attempt+1} failed, retrying...")
+                        time.sleep(1)
+                    else:  # No break occurred in the loop
+                        logging.error("Could not acquire Hailo device - already in use")
+                        # Fall back to NonAI mode
+                        new_ai_key = "NonAI"
+                        ai_instances[new_ai_key] = NonAI(source)
+                        
+                    if new_ai_key != "NonAI":
+                        if new_ai_key == "AI1":
+                            ai_instances[new_ai_key] = AllObjectDetection(source)
+                        elif new_ai_key == "AI2":
+                            ai_instances[new_ai_key] = BoundaryObjectCounter(source, BOUNDARY_POLYGON)
+                        elif new_ai_key == "AI3":
+                            ai_instances[new_ai_key] = LineCrossingCounter(source, LINE_POINTS)
+                        elif new_ai_key == "AI4":
+                            ai_instances[new_ai_key] = FaceDetection(source)
+            except Exception as e:
+                logging.error(f"Error creating AI instance: {e}")
+                new_ai_key = "NonAI"
+                if "NonAI" not in ai_instances:
+                    ai_instances["NonAI"] = NonAI(source)
+        
+        # Update the current AI instance
+        current_ai_key = new_ai_key
+        ai = ai_instances[current_ai_key]
+        logging.debug(f"Updated AI instance to {type(ai).__name__}")
+        
+        # Start the AI instance in a new thread
+        ai_thread = threading.Thread(target=ai.run)
+        ai_thread.daemon = True  # Make thread daemon so it exits when main thread exits
+        ai_thread.start()
+        logging.debug(f"New AI instance {current_ai_key} started")
+        return True
+        
+    except Exception as e:
+        logging.error(f"Error during AI switch: {e}")
+        # Recovery action - try to go back to NonAI mode
+        current_ai_key = "NonAI"
+        if "NonAI" not in ai_instances:
+            ai_instances["NonAI"] = NonAI(source)
+        ai = ai_instances["NonAI"]
+        ai_thread = threading.Thread(target=ai.run)
+        ai_thread.daemon = True
+        ai_thread.start()
+        return False
+
+# Add this function to set CORS headers manually
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    return response
+
+# Improve the start_streaming route with better error handling
+@app.route('/start_streaming', methods=['POST'])
+def start_streaming():
+    global source, ai, ai_thread, current_ai_key
+    
+    try:
+        rtsp_link = request.form.get('rtspLink')
+        local_video = request.form.get('local_video_path')
+        ai_mode = request.form.get('ai_mode', 'NonAI')
+        
+        logging.debug(f"Received Data: rtspLink={rtsp_link}, local_video_path={local_video}")
+        
+        if rtsp_link:
+            source = rtsp_link
+        elif local_video:
+            source = local_video
+        else:
+            return "No video source specified", 400
+        
+        logging.debug(f"Using Source: {source}")
+        
+        # Stop any existing AI
+        if ai:
+            ai.stop()
+            if ai_thread and ai_thread.is_alive():
+                ai_thread.join(timeout=5)
+        
+        # Release device if it's being held
+        if current_ai_key != "NonAI":
+            device_manager.release_device()
+        
+        # Clear instances
+        ai_instances.clear()
+        
+        # Create new instance with new source
+        ai_instances["NonAI"] = NonAI(source)
+        current_ai_key = "NonAI"
+        ai = ai_instances[current_ai_key]
+        ai_thread = threading.Thread(target=ai.run)
+        ai_thread.daemon = True
+        ai_thread.start()
+        
+        return "Streaming started", 200
+    except Exception as e:
+        logging.error(f"Error starting stream: {e}")
+        return f"Error starting stream: {str(e)}", 500
+
+@app.route('/stop_streaming', methods=['POST'])
+def stop_streaming():
+    global ai, ai_thread
+    
+    if ai:
+        if hasattr(ai, 'stop'):
+            ai.stop()
+        if ai_thread and ai_thread.is_alive():
+            ai_thread.join(timeout=5)
+        return "Streaming stopped", 200
+    
+    return "No streaming process to stop", 400
+
+@app.route('/video_feed')
+def video_feed():
+    return Response(ai.generate_frames(), 
+                   mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/change_ai_mode', methods=['POST'])
+def change_ai_mode():
+    new_mode = request.form.get('ai_mode')
+    if not new_mode:
+        return "No AI mode specified", 400
+    
+    success = switch_ai(new_mode)
+    if success:
+        return f"AI mode changed to {new_mode}", 200
+    else:
+        return "Failed to change AI mode", 400
+
+# Static file serving
+DASHBOARD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Dashboard")
+if not os.path.exists(DASHBOARD_DIR):
+    DASHBOARD_DIR = os.path.dirname(os.path.abspath(__file__))
+
+@app.route('/')
+def index():
+    return send_from_directory(DASHBOARD_DIR, 'index.html')
+
+@app.route('/<path:filename>')
+def serve_static(filename):
+    return send_from_directory(DASHBOARD_DIR, filename)
+
+def cleanup():
+    global ai, ai_thread
+    logging.debug("Cleaning up resources...")
+    if ai:
+        ai.stop()
+        if ai_thread and ai_thread.is_alive():
+            ai_thread.join(timeout=5)
+    # Release device if it's being held
+    if current_ai_key != "NonAI":
+        device_manager.release_device()
+
+import atexit
+atexit.register(cleanup)
+
+if __name__ == "__main__":
+    print("Starting AI Streaming System...")
+    print("API available at http://localhost:5001")
+    app.run(host='0.0.0.0', port=5001, threaded=True)

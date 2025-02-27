@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KIDI AI Camera Control</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div id="container">
+        <div id="header">
+            <img src="logo.png" alt="Logo" id="logo">
+            <h1>KiDi IoT Object Detection AI</h1>
+        </div>
+
+        <!-- Page 1: Start Stream -->
+        <div id="start-page">
+            <div id="rtsp-section">
+                <!-- RTSP Radio and Input -->
+                <div class="radio-input-group">
+                    <label>
+                        <input type="radio" id="rtsp-radio" name="stream-type" value="rtsp" checked>
+                        RTSP
+                    </label>
+                    <input type="text" id="rtsp-link" name="rtsp-link" placeholder="Enter RTSP link here">
+                </div>
+
+                <!-- Sample Video Radio and Dropdown -->
+                <div class="radio-input-group">
+                    <label>
+                        <input type="radio" id="sample-video-radio" name="stream-type" value="sample-video">
+                        Sample Video
+                    </label>
+                    <select id="local-video-dropdown">
+                        <option value="resources/Pedestrian.mp4">Pedestrian</option>
+                        <option value="resources/vecteezy_people-crossing-the-street-on-green-light_28257902.mp4">
+                            Pedestrian 2</option>
+                        <option value="resources/RoadTraffic1.mp4">Road Traffic 1</option>
+                        <option value="resources/RoadTrafic2.mp4">Road Traffic 2</option>
+                    </select>
+                </div>
+
+                <!-- Start Streaming Button -->
+                <button id="start-streaming">Start Streaming</button>
+            </div>
+        </div>
+
+        <!-- Page 2: Stream Active -->
+        <div id="stream-section" style="display: none;">
+            <div id="video-container">
+                <!-- Left section: controls and text -->
+                <div id="left-section">
+                    <p>Select AI Mode:</p>
+                    <button id="AI1">1: All Object Detection</button>
+                    <button id="AI2">2: Object in Boundary Count</button>
+                    <button id="AI3">3: Object Counting</button>
+                    <button id="AI4">4: Face Detection</button>
+                    <button id="NonAI">Non AI</button>
+                    <button id="stop-streaming">Stop Streaming</button>
+                </div>
+                <!-- Right section: video -->
+                <div id="right-section">
+                    <div class="video-wrapper">
+                        <img id="video-stream" src="" alt="Video Stream">
+                        <button id="refresh-stream" class="refresh-button" title="Refresh Video Stream">
+                            <span class="refresh-icon"></span>Refresh
+                        </button>
+                        <div id="loading-overlay" class="loading-overlay" style="display: none;">
+                            <div class="loading-spinner"></div>
+                            <div class="loading-text">Changing AI Mode...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let aiMode = 'NonAI';
+        let isIntentionalStop = false;
+
+        // Function to show toast notifications
+        function showToast(message, type = 'info') {
+            // Remove any existing toasts first
+            const existingToasts = document.querySelectorAll('.toast');
+            existingToasts.forEach(toast => {
+                toast.remove();
+            });
+            
+            // Create and show the new toast
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+        
+            // Remove toast after animation completes
+            setTimeout(() => {
+                if (toast.parentElement) {
+                    toast.classList.add('fade-out');
+                    setTimeout(() => toast.remove(), 300);
+                }
+            }, 2700);
+        }
+
+        // Add loading states to buttons
+        function setLoading(button, isLoading) {
+            if (isLoading) {
+                button.classList.add('loading');
+                button.disabled = true;
+            } else {
+                button.classList.remove('loading');
+                button.disabled = false;
+            }
+        }
+
+        // Function to completely refresh the video stream
+        function refreshVideoStream(message = 'Refreshing video stream...') {
+            // Show loading overlay with custom message
+            const loadingOverlay = document.getElementById('loading-overlay');
+            document.querySelector('.loading-text').textContent = message;
+            loadingOverlay.style.display = 'flex';
+            
+            // Get the video element
+            const oldImage = document.getElementById('video-stream');
+            
+            // Create a new image element
+            const newImage = document.createElement('img');
+            newImage.id = 'video-stream';
+            newImage.alt = 'Video Stream';
+            
+            // Add event listeners to the new image
+            newImage.addEventListener('load', function() {
+                loadingOverlay.style.display = 'none';
+                showToast('Stream refreshed successfully', 'success');
+            });
+            
+            newImage.addEventListener('error', function(e) {
+                console.error('Video stream loading error:', e);
+                loadingOverlay.style.display = 'none';
+                showToast('Error loading video stream', 'error');
+            });
+            
+            // Add timestamp to prevent caching
+            const timestamp = new Date().getTime();
+            newImage.src = `/video_feed?t=${timestamp}`;
+            
+            // Replace old image with new one
+            oldImage.parentNode.replaceChild(newImage, oldImage);
+        }
+
+        // Function to periodically check and refresh stream if needed
+        function setupStreamRefreshCheck() {
+            let consecutiveEmptyFrames = 0;
+            const maxEmptyFrames = 3;
+            
+            // Check every 2 seconds
+            const checkInterval = setInterval(() => {
+                const videoStream = document.getElementById('video-stream');
+                
+                if (!videoStream || document.getElementById('start-page').style.display !== 'none') {
+                    // If we're not in streaming mode or video element doesn't exist
+                    clearInterval(checkInterval);
+                    return;
+                }
+                
+                // Check if the image is actually loaded with content
+                if (videoStream.complete && videoStream.naturalHeight <= 1) {
+                    consecutiveEmptyFrames++;
+                    console.log(`Potentially empty stream detected (${consecutiveEmptyFrames}/${maxEmptyFrames})`);
+                    
+                    if (consecutiveEmptyFrames >= maxEmptyFrames) {
+                        console.log('Stream appears to be frozen, refreshing...');
+                        refreshVideoStream('Auto-refreshing frozen stream...');
+                        consecutiveEmptyFrames = 0;
+                    }
+                } else {
+                    consecutiveEmptyFrames = 0;
+                }
+            }, 2000);
+            
+            // Stop checking after 60 seconds
+            setTimeout(() => {
+                clearInterval(checkInterval);
+            }, 60000);
+        }
+
+        // Function to change AI mode
+        function changeAIMode(newMode) {
+            if (aiMode === newMode) {
+                showToast(`AI mode is already set to ${newMode}`, 'info');
+                return;
+            }
+            
+            // Show loading overlay
+            document.getElementById('loading-overlay').style.display = 'flex';
+            document.querySelector('.loading-text').textContent = `Changing to ${newMode} mode...`;
+            
+            // Disable all AI mode buttons while changing
+            const aiButtons = ['AI1', 'AI2', 'AI3', 'AI4', 'NonAI'];
+            aiButtons.forEach(id => {
+                document.getElementById(id).disabled = true;
+            });
+            
+            fetch('/change_ai_mode', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `ai_mode=${encodeURIComponent(newMode)}`,
+            })
+            .then(response => response.text())
+            .then(text => {
+                if (text.includes("changed")) {  // Ensure API response is correct
+                    aiMode = newMode;
+                    
+                    // Wait a moment for the server to switch AI modes
+                    setTimeout(() => {
+                        // Use our refresh function
+                        refreshVideoStream(`Switching to ${newMode} mode...`);
+                        showToast(`AI mode changed to ${newMode}`, 'success');
+
+                        setupStreamRefreshCheck();
+                    }, 500);
+                } else {
+                    showToast(text, 'error');
+                    document.getElementById('loading-overlay').style.display = 'none';
+                }
+            })
+            .catch(error => {
+                showToast('Error: ' + error.message, 'error');
+                console.error('AI mode change error:', error);
+                document.getElementById('loading-overlay').style.display = 'none';
+            })
+            .finally(() => {
+                // Re-enable all AI mode buttons
+                setTimeout(() => {
+                    aiButtons.forEach(id => {
+                        document.getElementById(id).disabled = false;
+                    });
+                }, 1000);
+            });
+        }
+
+        // Start streaming event handler
+        document.getElementById('start-streaming').addEventListener('click', function() {
+            const button = this;
+            setLoading(button, true);
+
+            const rtspLink = document.getElementById('rtsp-link').value;
+            const localVideoPath = document.getElementById('local-video-dropdown').value;
+            const aiMode = 'NonAI';
+
+            let requestBody;
+            if (document.getElementById('rtsp-radio').checked) {
+                if (!rtspLink) {
+                    showToast('RTSP link is required for RTSP streaming.', 'error');
+                    setLoading(button, false);
+                    return;
+                }
+                requestBody = `rtspLink=${encodeURIComponent(rtspLink)}&ai_mode=${encodeURIComponent(aiMode)}`;
+            } else {
+                requestBody = `local_video_path=${encodeURIComponent(localVideoPath)}&ai_mode=${encodeURIComponent(aiMode)}`;
+            }
+
+            // Use relative URL for fetch request
+            fetch('/start_streaming', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: requestBody,
+            })
+            .then(response => {
+                if (response.ok) {
+                    showToast('Streaming started successfully!', 'success');
+                    document.getElementById('video-stream').src = "/video_feed";
+                    document.getElementById('start-page').style.display = 'none';
+                    document.getElementById('stream-section').style.display = 'flex';
+                    
+                    // Set up auto-refresh check
+                    setupStreamRefreshCheck();
+                } else {
+                    return response.text().then(text => {
+                        throw new Error(text || 'Error starting stream');
+                    });
+                }
+            })
+            .catch(error => {
+                showToast('Error: ' + error.message, 'error');
+                console.error('Streaming error:', error);
+            })
+            .finally(() => setLoading(button, false));
+        });
+
+        // Stop streaming event handler
+        document.getElementById('stop-streaming').addEventListener('click', function() {
+        // Set the flag to true before stopping
+        isIntentionalStop = true;
+        
+        fetch('/stop_streaming', {
+            method: 'POST',
+        })
+        .then(response => {
+            if (response.ok) {
+                showToast('Streaming stopped successfully!', 'success');
+                document.getElementById('video-stream').src = "";
+                document.getElementById('start-page').style.display = 'block';
+                document.getElementById('stream-section').style.display = 'none';
+            } else {
+                response.text().then(text => showToast(text, 'error'));
+            }
+        })
+        .catch(error => showToast(error.message, 'error'))
+        .finally(() => {
+            // Reset the flag after a short delay
+            setTimeout(() => {
+                isIntentionalStop = false;
+            }, 500);
+        });
+    });
+
+        // Add refresh button event listener
+        document.getElementById('refresh-stream').addEventListener('click', function() {
+            refreshVideoStream('Manually refreshing video stream...');
+        });
+
+        // AI mode button event listeners
+        document.getElementById('AI1').addEventListener('click', function() {
+            changeAIMode('AI1');
+        });
+
+        document.getElementById('AI2').addEventListener('click', function() {
+            changeAIMode('AI2');
+        });
+
+        document.getElementById('AI3').addEventListener('click', function() {
+            changeAIMode('AI3');
+        });
+
+        document.getElementById('AI4').addEventListener('click', function() {
+            changeAIMode('AI4');
+        });
+
+        document.getElementById('NonAI').addEventListener('click', function() {
+            changeAIMode('NonAI');
+        });
+
+        // Add event listeners for video stream loading states
+        document.addEventListener('DOMContentLoaded', function() {
+            const videoStream = document.getElementById('video-stream');
+            if (videoStream) {
+                videoStream.addEventListener('load', function() {
+                    document.getElementById('loading-overlay').style.display = 'none';
+                });
+                
+                videoStream.addEventListener('error', function(e) {
+                    // Only show error if it's not from intentionally stopping the stream
+                    if (!isIntentionalStop) {
+                        console.error('Video stream loading error:', e);
+                        document.getElementById('loading-overlay').style.display = 'none';
+                        showToast('Error loading video stream', 'error');
+                    }
+                });
+            }
+            
+            // Initialize radio button behavior
+            handleRadioChange();
+        });
+
+        // Helper function to check if video stream is working
+        function checkVideoStreamStatus() {
+            const videoStream = document.getElementById('video-stream');
+            const streamSection = document.getElementById('stream-section');
+            
+            if (streamSection.style.display === 'none') {
+                return; // Don't check if we're not in streaming mode
+            }
+            
+            if (videoStream && videoStream.complete) {
+                if (videoStream.naturalHeight <= 1) {
+                    console.log('Detected potentially broken stream');
+                    // Only refresh if we've been in this state for a while
+                    if (!videoStream._brokenTimeout) {
+                        videoStream._brokenTimeout = setTimeout(() => {
+                            refreshVideoStream('Auto-refreshing broken stream...');
+                            delete videoStream._brokenTimeout;
+                        }, 5000);
+                    }
+                } else {
+                    // Stream is working fine, clear timeout if it exists
+                    if (videoStream._brokenTimeout) {
+                        clearTimeout(videoStream._brokenTimeout);
+                        delete videoStream._brokenTimeout;
+                    }
+                }
+            }
+        }
+
+        // Check video stream status periodically
+        setInterval(checkVideoStreamStatus, 3000);
+
+        // Function to handle radio button selection
+        function handleRadioChange() {
+            const rtspRadio = document.getElementById('rtsp-radio');
+            const rtspLink = document.getElementById('rtsp-link');
+            const localVideoDropdown = document.getElementById('local-video-dropdown');
+            
+            // Set initial state on page load
+            rtspLink.disabled = !rtspRadio.checked;
+            localVideoDropdown.disabled = rtspRadio.checked;
+            
+            // Add event listeners to radio buttons
+            document.getElementById('rtsp-radio').addEventListener('change', function() {
+                rtspLink.disabled = false;
+                localVideoDropdown.disabled = true;
+            });
+            
+            document.getElementById('sample-video-radio').addEventListener('change', function() {
+                rtspLink.disabled = true;
+                localVideoDropdown.disabled = false;
+            });
+        }
+
+        // Run the function when the page loads
+        document.addEventListener('DOMContentLoaded', handleRadioChange);
+    </script>
+</body>
+</html>
