@@ -320,25 +320,23 @@ def stop_streaming():
 
 @app.route('/video_feed')
 def video_feed():
-    if ai is None:
-        # Return a static image or error message when no streaming is active
-        def generate_placeholder():
-            placeholder = np.ones((480, 640, 3), dtype=np.uint8) * 128  # Gray placeholder
-            import cv2
-            # Add text to the placeholder
-            cv2.putText(placeholder, "No active stream", (180, 240), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-            while True:
-                _, jpeg = cv2.imencode('.jpg', placeholder)
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
-                time.sleep(1)  # Update placeholder image less frequently
-        
-        return Response(generate_placeholder(), 
-                       mimetype='multipart/x-mixed-replace; boundary=frame')
+    global ai
+    
+    # Check if AI instance exists and is alive
+    if not ai:
+        return "No active video stream", 404
+    
+    # Check for reconnection failure
+    reconnection_failed = hasattr(ai, 'reconnection_failed') and ai.reconnection_failed
+    
+    # Add flag to URL if reconnection failed
+    if reconnection_failed:
+        return Response(ai.generate_frames(), 
+                      mimetype='multipart/x-mixed-replace; boundary=frame',
+                      headers={'X-Reconnection-Failed': 'true'})
     else:
         return Response(ai.generate_frames(), 
-                       mimetype='multipart/x-mixed-replace; boundary=frame')
+                      mimetype='multipart/x-mixed-replace; boundary=frame')
         
 @app.route('/change_ai_mode', methods=['POST'])
 def change_ai_mode():

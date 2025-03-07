@@ -7,6 +7,7 @@ import hailo
 import gc
 import time
 import logging
+import requests
 
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst, GLib
@@ -166,28 +167,90 @@ class BaseHailoAI:
     def on_bus_message(self, bus, message):
         if message.type == Gst.MessageType.ERROR:
             err, debug = message.parse_error()
+            error_msg = f"{err}"
             print(f"GStreamer Error: {err} - {debug}")
+            
+            # Store the last error message for display
+            self.last_error = error_msg
+            
             if not self.reconnecting:
                 GLib.idle_add(self.handle_error_and_reconnect)
 
     def handle_error_and_reconnect(self):
         print("Handling error and reconnecting...")
         self.reconnecting = True
+        
+        # Initialize if not exists, otherwise increment
+        if not hasattr(self, 'reconnect_attempt'):
+            self.reconnect_attempt = 1  # Start at 1 for first attempt
+        else:
+            self.reconnect_attempt += 1
+            
+        print(f"Setting reconnection attempt to {self.reconnect_attempt}/5")
+        
+        # If exceeded 5 attempts, trigger auto-stop
+        if self.reconnect_attempt >= 5:
+            print("Maximum reconnection attempts reached, stopping stream.")
+            self.auto_stop_stream()
+            return False
+            
         self.pipeline.set_state(Gst.State.NULL)
+        
+        # Schedule the next reconnection attempt
         GLib.timeout_add(5000, self.try_reconnect)
         return False
-
+    
     def try_reconnect(self):
-        print("Attempting to reconnect...")
+        print(f"Attempting to reconnect... (Attempt {self.reconnect_attempt}/5)")
         try:
+            # Create a new pipeline
             self.create_pipeline()
+            # Start the pipeline
             self.pipeline.set_state(Gst.State.PLAYING)
+            
+            # Check if the pipeline started successfully (with timeout)
+            state = self.pipeline.get_state(2 * Gst.SECOND)
+            if state[0] != Gst.StateChangeReturn.SUCCESS:
+                raise Exception(f"Failed to start pipeline: {state[0]}")
+                
+            print("Reconnection successful!")
+            # Reset counter and reconnecting flag only on success
             self.reconnecting = False
+            self.reconnect_attempt = 0
             return False
         except Exception as e:
             print(f"Reconnection failed: {e}")
-            return True
+            # Handle reconnection failure directly here instead of waiting for bus error
+            self.reconnect_attempt += 1
+            print(f"Reconnection attempt {self.reconnect_attempt} failed")
+            
+            # Clean up failed pipeline
+            if self.pipeline:
+                self.pipeline.set_state(Gst.State.NULL)
+            
+            # Check if we've reached max attempts
+            if self.reconnect_attempt >= 5:
+                print("Maximum reconnection attempts reached, stopping stream.")
+                self.auto_stop_stream()
+                return False  # Don't schedule another attempt
+            else:
+                # Schedule another attempt
+                GLib.timeout_add(5000, self.try_reconnect)
+                return False  # Cancel current timeout
 
+    def auto_stop_stream(self):
+        """Trigger an auto-stop via HTTP request to the Flask app"""
+        try:
+            # Set a flag to indicate reconnection failure
+            self.reconnection_failed = True
+            
+            # Make a local request to stop the stream (use correct port)
+            requests.post('http://localhost:5001/stop_streaming', timeout=5)
+            self.reconnecting = False
+            self.reconnect_attempt = 0
+        except Exception as e:
+            print(f"Failed to auto-stop stream: {e}")
+            
     def on_new_sample(self, sink):
         if self.reconnecting or not self.running:
             return Gst.FlowReturn.OK
@@ -242,28 +305,44 @@ class BaseHailoAI:
             self.stop()
 
     def stop(self):
+        # Prevent multiple stops on the same instance
+        if hasattr(self, '_stopping') and self._stopping:
+            logging.debug("Stop already in progress, skipping...")
+            return
+        
+        self._stopping = True
         logging.debug("Stopping AI instance...")
         self.running = False
         
         # Clear any pending bus messages
         if hasattr(self, "bus") and self.bus:
-            self.bus.remove_signal_watch()
+            try:
+                self.bus.remove_signal_watch()
+            except Exception as e:
+                logging.warning(f"Error removing bus signal watch: {e}")
             
         # Stop GStreamer pipeline with proper state transitions
         if hasattr(self, "pipeline") and self.pipeline:
-            # First pause, then set to NULL state
-            self.pipeline.set_state(Gst.State.PAUSED)
-            time.sleep(0.2)  # Short delay for state transition
-            self.pipeline.set_state(Gst.State.NULL)
-            # Wait for state change to complete with timeout
-            state_change = self.pipeline.get_state(5 * Gst.SECOND)
-            if state_change[0] != Gst.StateChangeReturn.SUCCESS:
-                logging.warning(f"Pipeline state change failed: {state_change[0]}")
+            try:
+                # First pause, then set to NULL state
+                self.pipeline.set_state(Gst.State.PAUSED)
+                time.sleep(0.2)  # Short delay for state transition
+                self.pipeline.set_state(Gst.State.NULL)
+                # Wait for state change to complete with timeout
+                state_change = self.pipeline.get_state(5 * Gst.SECOND)
+                if state_change[0] != Gst.StateChangeReturn.SUCCESS:
+                    logging.warning(f"Pipeline state change failed: {state_change[0]}")
+            except Exception as e:
+                logging.error(f"Error stopping pipeline: {e}")
         
         # Quit GLib main loop if it's running
-        if hasattr(self, "loop") and self.loop and GLib.MainLoop.is_running(self.loop):
-            GLib.idle_add(self.loop.quit)
-            time.sleep(0.5)  # Give loop time to quit
+        if hasattr(self, "loop") and self.loop:
+            try:
+                if GLib.MainLoop.is_running(self.loop):
+                    GLib.idle_add(self.loop.quit)
+                    time.sleep(0.5)  # Give loop time to quit
+            except Exception as e:
+                logging.error(f"Error stopping GLib main loop: {e}")
         
         # Explicitly release resources
         self.pipeline = None
@@ -273,20 +352,72 @@ class BaseHailoAI:
         gc.collect()
         time.sleep(0.5)  # Short delay to ensure resources are released
         
+        self._stopping = False  # Reset the stopping flag
         logging.debug("AI instance stopped and resources cleaned up")
 
     def generate_frames(self):
         while self.running:
-            with self.frame_lock:
-                if self.current_frame is None:
-                    continue  # Skip if no frame is available
+            # Check for reconnection failure flag
+            if hasattr(self, 'reconnection_failed') and self.reconnection_failed:
+                # Create a "Connection Failed" status image
+                placeholder = np.ones((self.height, self.width, 3), dtype=np.uint8) * 64  # Dark background
+                
+                # Add failure message
+                cv2.putText(placeholder, "Connection failed after multiple attempts", 
+                        (int(self.width/2) - 300, int(self.height/2) - 20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (50, 50, 255), 2)
+                
+                cv2.putText(placeholder, "Returning to start page...", 
+                        (int(self.width/2) - 200, int(self.height/2) + 20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (50, 50, 255), 2)
+                
+                ret, buffer = cv2.imencode('.jpg', placeholder)
+                
+                if ret:
+                    yield (b'--frame\r\n'
+                        b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+                
+                # Add a delay before stopping the frame generation
+                time.sleep(3)
+                self.running = False
+                break
+            
+            if self.reconnecting:
+                # Create a "Reconnecting" status image
+                placeholder = np.ones((self.height, self.width, 3), dtype=np.uint8) * 64  # Dark background
+                
+                # Add reconnecting text with attempt count
+                attempt_text = f"Reconnecting... (Attempt {getattr(self, 'reconnect_attempt', 0)}/5)"
+                cv2.putText(placeholder, attempt_text, (int(self.width/2) - 600, int(self.height/2)), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (50, 150, 255), 2)
+                
+                # Add error message if available
+                if hasattr(self, 'last_error') and self.last_error:
+                    error_msg = f"Error: {self.last_error}"
+                    cv2.putText(placeholder, error_msg, (int(self.width/2) - 600, int(self.height/2) + 40), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (50, 150, 255), 1)
+                
+                ret, buffer = cv2.imencode('.jpg', placeholder)
+                
+                if ret:
+                    yield (b'--frame\r\n'
+                        b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+                
+                time.sleep(0.5)  # Update reconnecting screen at lower rate
+            else:
+                # Normal frame handling
+                with self.frame_lock:
+                    if self.current_frame is None:
+                        time.sleep(0.1)
+                        continue  # Skip if no frame is available
 
-                ret, buffer = cv2.imencode('.jpg', self.current_frame)
-                if not ret:
-                    continue  # Skip if frame encoding fails
+                    ret, buffer = cv2.imencode('.jpg', self.current_frame)
+                    if not ret:
+                        time.sleep(0.1)
+                        continue  # Skip if frame encoding fails
 
-            yield (b'--frame\r\n'
-                b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+                yield (b'--frame\r\n'
+                    b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
 
 
 class AllObjectDetection(BaseHailoAI):

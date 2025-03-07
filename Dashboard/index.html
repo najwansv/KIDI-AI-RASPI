@@ -386,6 +386,39 @@
                 });
         });
 
+        // Add to your existing JavaScript for automatic return to start page
+        function setupAutoRedirectOnConnectionFailure() {
+            const videoStream = document.getElementById('video-stream');
+            
+            // Create a MutationObserver to detect when the video source changes
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.attributeName === 'src') {
+                        const src = videoStream.getAttribute('src');
+                        
+                        // If the src contains a special flag indicating reconnection failure
+                        if (src && src.includes('reconnection_failed=true')) {
+                            console.log('Reconnection failed, returning to start page');
+                            showToast('Connection failed after multiple attempts', 'error');
+                            
+                            // Return to start page after a brief delay
+                            setTimeout(() => {
+                                document.getElementById('video-stream').src = "";
+                                document.getElementById('start-page').style.display = 'block';
+                                document.getElementById('stream-section').style.display = 'none';
+                            }, 3000);
+                        }
+                    }
+                });
+            });
+            
+            // Start observing the video element
+            observer.observe(videoStream, { attributes: true });
+        }
+
+        // Setup the redirect behavior when page loads
+        document.addEventListener('DOMContentLoaded', setupAutoRedirectOnConnectionFailure);
+
         // Add refresh button event listener
         document.getElementById('refresh-stream').addEventListener('click', function () {
             refreshVideoStream('Manually refreshing video stream...');
