@@ -8,6 +8,8 @@ import gc
 import time
 import logging
 import requests
+from pathlib import Path
+import os
 
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst, GLib
@@ -422,8 +424,15 @@ class BaseHailoAI:
 
 class AllObjectDetection(BaseHailoAI):
     def __init__(self, source,
-                 hef_path="/home/pi/Documents/KIDI-AI-RASPI/Model/yolov11n.hef",
-                 post_process_so="/home/pi/Documents/KIDI-AI-RASPI/Model/libyolo_hailortpp_postprocess.so"):
+                 hef_path=None,
+                 post_process_so=None):
+        # Get model directory
+        model_dir = get_model_path()
+        
+        # Use provided paths or fall back to defaults with relative paths
+        hef_path = hef_path or str(model_dir / "yolov11n.hef")
+        post_process_so = post_process_so or str(model_dir / "libyolo_hailortpp_postprocess.so")
+        
         super().__init__(source, hef_path, post_process_so)
 
     def process_detections(self, frame, detections):
@@ -445,8 +454,15 @@ class AllObjectDetection(BaseHailoAI):
 
 class BoundaryObjectCounter(BaseHailoAI):
     def __init__(self, source, boundary_polygon,
-                 hef_path="/home/pi/Documents/KIDI-AI-RASPI/Model/yolov11n.hef",
-                 post_process_so="/home/pi/Documents/KIDI-AI-RASPI/Model/libyolo_hailortpp_postprocess.so"):
+                 hef_path=None,
+                 post_process_so=None):
+        # Get model directory
+        model_dir = get_model_path()
+        
+        # Use provided paths or fall back to defaults with relative paths
+        hef_path = hef_path or str(model_dir / "yolov11n.hef")
+        post_process_so = post_process_so or str(model_dir / "libyolo_hailortpp_postprocess.so")
+        
         super().__init__(source, hef_path, post_process_so)
         self.boundary_polygon = boundary_polygon
         self.inside_objects = {}
@@ -505,10 +521,17 @@ class BoundaryObjectCounter(BaseHailoAI):
         cv2.polylines(frame, [self.boundary_polygon], isClosed=True, color=(0, 0, 255), thickness=2)
 
 class LineCrossingCounter(BaseHailoAI): 
-    def __init__(self, source, line_points, 
-                 hef_path="/home/pi/Documents/KIDI-AI-RASPI/Model/yolov11n.hef", 
-                 post_process_so="/home/pi/Documents/KIDI-AI-RASPI/Model/libyolo_hailortpp_postprocess.so"):
-        super().__init__(source, hef_path, post_process_so) 
+    def __init__(self, source,line_points,
+                 hef_path=None,
+                 post_process_so=None):
+        # Get model directory
+        model_dir = get_model_path()
+        
+        # Use provided paths or fall back to defaults with relative paths
+        hef_path = hef_path or str(model_dir / "yolov11n.hef")
+        post_process_so = post_process_so or str(model_dir / "libyolo_hailortpp_postprocess.so")
+        
+        super().__init__(source, hef_path, post_process_so)
         self.line_points = line_points # expects two endpoints: [(x1, y1), (x2, y2)] 
         self.last_side = {} # tracking last known side for each object (by unique ID) 
         self.crossing_counts = {} # crossing counts per label
@@ -592,12 +615,17 @@ class LineCrossingCounter(BaseHailoAI):
 
 class FaceDetection(BaseHailoAI):
     def __init__(self, source,
-                 hef_path="/home/pi/Documents/KIDI-AI-RASPI/Model/retinaface_mobilenet_v1.hef",
-                 post_process_so="/home/pi/Documents/KIDI-AI-RASPI/Model/libface_detection_post.so",
-                 width=1280, height=720):
+                 hef_path=None,
+                 post_process_so=None):
+        # Get model directory
+        model_dir = get_model_path()
+        
+        # Use provided paths or fall back to defaults with relative paths
+        hef_path = hef_path or str(model_dir / "retinaface_mobilenet_v1.hef")
+        post_process_so = post_process_so or str(model_dir / "libface_detection_post.so")
         self.filter_function_name = "retinaface"
-        self.width = width
-        self.height = height
+        self.width = 1280
+        self.height = 720
         super().__init__(source, hef_path, post_process_so)
 
     def create_pipeline(self):
@@ -743,3 +771,15 @@ def generate_frames():
     import time
     while True:
         time.sleep(0.03)
+
+def get_model_path():
+    """Returns path to the model directory relative to script location"""
+    script_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+    model_dir = script_dir.parent / "Model"
+    
+    if not model_dir.exists():
+        model_dir.mkdir(parents=True)
+        logging.warning(f"Created model directory at {model_dir}")
+    
+    logging.info(f"Using model directory: {model_dir}")
+    return model_dir
