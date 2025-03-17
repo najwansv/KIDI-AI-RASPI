@@ -20,9 +20,6 @@ logging.basicConfig(level=logging.DEBUG)
 BOUNDARY_POLYGON = np.array([(200, 200), (1000, 200), (1000, 600), (200, 600)], np.int32)
 LINE_POINTS = [(800, 0), (800, 1000)]  # adjust coordinates as needed
 
-# Source URL for the video stream (can be changed via API)
-# source = "resources/RoadTrafic2.mp4"  # Default source, but don't start streaming
-
 # Initialize AI management variables without starting anything
 ai_instances = {}
 device_manager = HailoDeviceManager.get_instance()
